@@ -6,6 +6,8 @@ from typing import Optional
 
 from curl_cffi import requests as curl_requests
 
+from ..proxy import normalize_proxy
+
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -33,6 +35,7 @@ def make_session(
         }
     )
     if proxy:
+        proxy = normalize_proxy(proxy)
         session.proxies = {"http": proxy, "https": proxy}
     return session
 

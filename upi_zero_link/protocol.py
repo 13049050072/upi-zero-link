@@ -24,7 +24,9 @@ from ._vendor import oaics
 from ._vendor.http import chatgpt_session, make_session, request as request_http
 from ._vendor.risk import checkout_risk_headers
 from .addresses import next_address
+from .proxy import normalize_proxy
 
+PAYMENT_METHOD = "upi"
 PROMO_CAMPAIGN = "plus-1-month-free"
 
 CHECKOUT_URL = "https://chatgpt.com/backend-api/payments/checkout"
@@ -88,6 +90,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
               失败 -> {"ok": False, "error": "..."}（error 取值见 README）
     抛 NetworkDown: 传输层断线，且**没有**走到 confirm，可以安全换出口重来。
     """
+    proxy = normalize_proxy(proxy)
     access_token = str(account.get("access_token") or "").strip()
     email = str(account.get("email") or "")
     session_token = str(account.get("session_token") or "")
@@ -117,14 +120,18 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
                                   fingerprint=fp)
         oaics.warmup_chatgpt_page(chatgpt, country="IN", device_id=device_id, timeout=20,
                                   fingerprint=fp)
-        sentinel = checkout_risk_headers(chatgpt.get, proxy, device_id, fp["oai_session_id"], fp,
-                                         PROMO_CAMPAIGN, "oai-did=" + device_id, 25,
-                                         lambda *a: None)
+        sentinel = checkout_risk_headers(
+            chatgpt.get, proxy, device_id, fp["oai_session_id"], fp,
+            PROMO_CAMPAIGN, "oai-did=" + device_id, 25,
+            lambda stage, status, msg: emit("risk %s %s %s" % (stage, status, str(msg)[:80])),
+        )
         headers = identity.chatgpt_headers(
             access_token, fp,
             referer="https://chatgpt.com/?promo_campaign=" + PROMO_CAMPAIGN,
             route="/backend-api/payments/checkout")
         headers.update(sentinel or {})
+        if not (sentinel or {}).get("openai-sentinel-token"):
+            emit("WARN 未生成建单风控令牌，本次建单大概率被拒")
         emit("stage checkout")
         checkout = preconfirm(lambda: request_http(
             chatgpt, "POST", CHECKOUT_URL, headers=headers, timeout=25, json={
@@ -206,7 +213,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
     if not isinstance(total, dict) or type(total.get("due")) is not int:
         return {"ok": False, "error": "tax_unverified"}
     methods = tax_page.get("payment_method_types") or init.get("payment_method_types") or []
-    if "upi" not in {str(item).lower() for item in methods}:
+    if PAYMENT_METHOD not in {str(item).lower() for item in methods}:
         return {"ok": False, "error": "upi_unavailable"}
 
     init = {**init, **tax_page}
@@ -233,7 +240,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
         emit("stage payment_method")
         phase = "payment_method"
         pm_response = call_stripe("POST", PAYMENT_METHOD_URL, data={
-            "type": "upi",
+            "type": PAYMENT_METHOD,
             "key": pk,
             "billing_details[name]": billing["name"],
             "billing_details[email]": email,
@@ -254,7 +261,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
             "payment_method": pm_id,
             "expected_amount": str(due),
             "tax_id_collection[purchasing_as_business]": "false",
-            "expected_payment_method_type": "upi",
+            "expected_payment_method_type": PAYMENT_METHOD,
             "return_url": return_url,
             "key": pk,
             "_stripe_version": STRIPE_VERSION,

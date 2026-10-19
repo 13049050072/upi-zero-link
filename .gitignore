@@ -5,3 +5,5 @@ links.json
 build/
 dist/
 *.egg-info/
+server.ini
+upi-zero-link.ini

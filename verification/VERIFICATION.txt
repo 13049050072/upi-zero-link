@@ -1,0 +1,649 @@
+VERIFICATION RECORD
+====================
+
+Changed branch/field
+--------------------
+- CLI branch: service mode is selected when `--service-url` or `--api-url` is present.
+- Service request fields: `cdk`, `payment_method: "upi"`, `tries`, account identity fields, and proxy.
+- Protocol field: `PAYMENT_METHOD = "upi"`; Stripe method creation and confirmation use this constant.
+- Batch branch: `--concurrency` accepts only 1, 2, 3, or 4; results are collected in input order, `--all` controls stop-after-success behavior, and writes occur on the main thread.
+
+Role artifacts
+--------------
+- MODIFIED_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/MODIFIED_FILE
+- DIFF_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/DIFF_FILE
+- VERIFICATION.txt: /Users/jiangdk/code/personal/upi-zero-link/verification/VERIFICATION.txt
+- ROLLBACK.sh: /Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh
+
+Source and artifact hashes
+--------------------------
+- BASELINE `upi_zero_link/cli.py` SHA-256: d0d8927594742bdfcbc05742875ad744c1ebaf9f3f20ff17838174d71d29a971
+- MODIFIED source `upi_zero_link/cli.py` SHA-256: dc98c633628577349f22fa4f57773f06a88783c88a4d8bff4ee44a2f771daa42
+- MODIFIED_FILE SHA-256 after reapply: dc98c633628577349f22fa4f57773f06a88783c88a4d8bff4ee44a2f771daa42
+
+BASELINE
+--------
+Command:
+`PYTHONPATH=/tmp/upi-zero-link-test-stub:/tmp/upi-zero-link-baseline.JQLpNs python3 /tmp/upi-zero-link-baseline.JQLpNs/tests/test_offline.py`
+Input: no arguments; offline fixtures in `tests/test_offline.py`.
+Literal stdout:
+真链判为真                              OK
+被拒链判为废                             OK
+fam=1999 判为付款链                     OK
+canceled 判为废                       OK
+没有 payload 时判废                     OK
+verify_url 走通                      OK
+410 判为失效链                          OK
+读不到时返回 unreachable 且算没结论           OK
+空 URL 直接拒绝                         OK
+同 token 指纹稳定                       OK
+不同 token 指纹不同                      OK
+印度时区                               OK
+地址池 40 条不重复                        OK
+地址字段齐全                             OK
+结果：全部通过
+Literal stderr: empty
+Exit status: 0
+
+MODIFIED
+--------
+Command:
+`PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 -m unittest discover -s /Users/jiangdk/code/personal/upi-zero-link/tests -v`
+Input: unittest discovery; service URL, CDK, fixed UPI, concurrency, and routing fixtures.
+Literal stdout:
+12:20:13 a@example.test 第 1/1 轮（出口 proxy）
+Literal stderr:
+test_parser_supports_service_url_cdk_and_upi_concurrency (test_features.FeatureTests.test_parser_supports_service_url_cdk_and_upi_concurrency) ... usage: upi-zero-link [-h] [--token TOKEN] [--email EMAIL]
+                     [--accounts ACCOUNTS] [--proxy PROXY]
+                     [--service-url SERVICE_URL] [--cdk CDK] [--rounds ROUNDS]
+                     [--tries {1,2}] [--concurrency {1,2,3,4}] [--all]
+                     [--quiet] [--notify] [--out OUT]
+upi-zero-link: error: argument --concurrency: invalid choice: '5' (choose from '1', '2', '3', '4')
+ok
+test_run_account_uses_service_mode_when_configured (test_features.FeatureTests.test_run_account_uses_service_mode_when_configured) ... ok
+test_run_accounts_limits_workers_and_preserves_order (test_features.FeatureTests.test_run_accounts_limits_workers_and_preserves_order) ... ok
+test_run_accounts_stops_after_success_in_serial_default_mode (test_features.FeatureTests.test_run_accounts_stops_after_success_in_serial_default_mode) ... ok
+test_service_client_sends_cdk_and_fixed_upi (test_features.FeatureTests.test_service_client_sends_cdk_and_fixed_upi) ... ok
+test_service_url_requires_http_scheme_and_host (test_service_url_requires_http_scheme_and_host) ... ok
+test_upi_is_the_only_protocol_payment_method (test_features.FeatureTests.test_upi_is_the_only_protocol_payment_method) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.068s
+
+OK
+Exit status: 0
+
+Matching BASELINE/MODIFIED command:
+`PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 /Users/jiangdk/code/personal/upi-zero-link/tests/test_offline.py`
+Literal stdout:
+真链判为真                              OK
+被拒链判为废                             OK
+fam=1999 判为付款链                     OK
+canceled 判为废                       OK
+没有 payload 时判废                     OK
+verify_url 走通                      OK
+410 判为失效链                          OK
+读不到时返回 unreachable 且算没结论           OK
+空 URL 直接拒绝                         OK
+同 token 指纹稳定                       OK
+不同 token 指纹不同                      OK
+印度时区                               OK
+地址池 40 条不重复                        OK
+地址字段齐全                             OK
+结果：全部通过
+Literal stderr: empty
+Exit status: 0
+
+ROLLBACK
+--------
+Command:
+`/Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/cli.py`
+Input: a separate copy of MODIFIED_FILE.
+Literal stdout:
+restored /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/cli.py from /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/cli.py
+Literal stderr: empty
+Exit status: 0
+
+Matching restored-copy command:
+`python3 -m py_compile /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/cli.py`
+Literal stdout: empty
+Literal stderr: empty
+Exit status: 0
+Hash comparison command:
+`cmp /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/cli.py /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/cli.py`
+Literal stdout: empty
+Literal stderr: empty
+Exit status: 0
+Restored behavior/status: rollback-test/cli.py matches the baseline byte-for-byte and compiles successfully. MODIFIED_FILE was then re-copied from the changed source and remains changed.
+
+Additional compile results
+--------------------------
+- Baseline command `python3 -m py_compile verification/baseline/cli.py`: stdout empty, stderr empty, exit 0.
+- Modified command `python3 -m py_compile upi_zero_link/cli.py`: stdout empty, stderr empty, exit 0.
+- New modules `protocol.py` and `service.py` were included in the modified compile pass and exited 0.
+
+Environment note
+----------------
+- The command `python -m py_compile ...` was attempted first and exited 127 because `python` is not installed as a command.
+- All verification used `python3`.
+- The repository's existing `curl_cffi` dependency is not installed in this environment, so tests used a temporary import-only curl_cffi stub. No project dependency files were changed.
+
+CURRENT COMPATIBLE SERVER VERIFICATION
+======================================
+Changed branch/field
+--------------------
+- New module: `upi_zero_link/server.py` implements `POST /api/extract`, `GET /api/jobs/{job_id}/events`, and `GET /api/cdk`.
+- Compatibility fields: `link_type` and `payment_method` are fixed to `upi`; request accepts `cdk` and `token`; result maps `long_url`, `copy_paste`, `image_url_png`, `image_url_svg`, `payment_method`, `payment_link_type`, and `expires_at`.
+- Runtime controls: `--workers` / `UPI_SERVER_WORKERS` is constrained to 1-4; `UPI_SERVER_CDK` authenticates requests; `UPI_SERVER_CDK_MAX_USES` provides an optional quota.
+- Package entrypoint: `upi-zero-link-server = "upi_zero_link.server:main"`; package version is 1.1.0.
+
+Role artifacts
+--------------
+- MODIFIED_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/MODIFIED_FILE
+- DIFF_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/DIFF_FILE
+- VERIFICATION.txt: /Users/jiangdk/code/personal/upi-zero-link/verification/VERIFICATION.txt
+- ROLLBACK.sh: /Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh
+- Supplemental smoke command: /Users/jiangdk/code/personal/upi-zero-link/verification/compatibility_smoke.py
+
+Source and artifact hashes
+--------------------------
+- Modified source `upi_zero_link/server.py` SHA-256: 1d7e95a44d0d56401a601b606f2efaa3b928ec46bbeea64b91d9bc31440d259a
+- MODIFIED_FILE SHA-256: 1d7e95a44d0d56401a601b606f2efaa3b928ec46bbeea64b91d9bc31440d259a
+- DIFF_FILE SHA-256: 9e23430a8c1c7b5779e6124e6aaa7360e0c6def7c84eceb8bd4c3c07e1273a31
+- ROLLBACK.sh SHA-256: 262e3241764c6930cfd8de616c6c622f7797990426b0d9135636b6c1e2fa7556
+- Baseline state marker: `/Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.py.absent`; no baseline `server.py` existed before this change.
+
+BASELINE
+--------
+Command:
+`if [ ! -e /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.py ]; then printf '%s\\n' 'server endpoint absent (baseline)'; else exit 1; fi`
+Input: baseline state probe; no network input.
+Literal stdout:
+`server endpoint absent (baseline)`
+Literal stderr: empty
+Exit status: 0
+
+MODIFIED
+--------
+Command:
+`PYTHONPATH=.. python3 /Users/jiangdk/code/personal/upi-zero-link/verification/compatibility_smoke.py`
+Input: fixture CDK `fixture-cdk`, fixture token `fixture-token`, link type `upi`, fake extractor result `https://fixture.example/upi`.
+Literal stdout:
+`http=202 job_id=yes sse_result=True sse_done=True payment_method=upi`
+Literal stderr: empty
+Exit status: 0
+
+Additional modified checks
+--------------------------
+- Command `PYTHONPATH=.. python3 /Users/jiangdk/code/personal/upi-zero-link/tests/test_server.py`: 2 tests passed, exit status 0.
+- Command `python3 -m py_compile server.py __init__.py`: stdout/stderr empty, exit status 0.
+- Command `git diff --check`: stdout/stderr empty, exit status 0.
+- Full discovery ran the new server tests successfully; the pre-existing protocol tests stop at import because `curl_cffi` is not installed in this shell.
+
+ROLLBACK
+--------
+Command:
+`/Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`
+Input: separate copy of MODIFIED_FILE at `/Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`.
+Literal stdout:
+`removed ../verification/rollback-test/server.py (baseline was absent)`
+Literal stderr: empty
+Exit status: 0
+
+Matching restored-state checks:
+- Command `test ! -e /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`: stdout/stderr empty, exit status 0.
+- The copy was then re-applied from MODIFIED_FILE, and `cmp server.py verification/MODIFIED_FILE` returned empty with exit status 0.
+- The working source `/Users/jiangdk/code/personal/upi-zero-link/upi_zero_link/server.py` remains present and unchanged after rollback testing.
+
+CONFIGURATION + PROXY ROTATION VERIFICATION
+============================================
+Changed branch/field
+--------------------
+- Added INI loading from `[server]` via `--config` / `UPI_SERVER_CONFIG`.
+- Added multiline `proxies` support with round-robin selection per submitted job; explicit request `proxy` still overrides the pool.
+- Added config/environment/CLI precedence: CLI > INI > environment > default.
+- Preserved unlimited self-use CDK semantics: `max_uses = 0` / `UPI_SERVER_CDK_MAX_USES=0` means no successful-use limit.
+- Added `config.example.ini`; real `server.ini` and `upi-zero-link.ini` are ignored by git.
+
+Role artifacts
+--------------
+- MODIFIED_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/MODIFIED_FILE
+- DIFF_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/DIFF_FILE
+- VERIFICATION.txt: /Users/jiangdk/code/personal/upi-zero-link/verification/VERIFICATION.txt
+- ROLLBACK.sh: /Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh
+- Config template: /Users/jiangdk/code/personal/upi-zero-link/config.example.ini
+
+Source and artifact hashes
+--------------------------
+- Modified source `upi_zero_link/server.py` SHA-256: 52ae2404dd2248dda737bfd86fc110be43f257cf5824d9469f410a282ef744bc
+- Baseline source `/Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py` SHA-256: 1d7e95a44d0d56401a601b606f2efaa3b928ec46bbeea64b91d9bc31440d259a
+- MODIFIED_FILE SHA-256: 52ae2404dd2248dda737bfd86fc110be43f257cf5824d9469f410a282ef744bc
+- DIFF_FILE SHA-256: e0a505dbd15d91c8dd7e222b0e7beca2f8572c577a5f3ba9c791d1dd3f0c3194
+- ROLLBACK.sh SHA-256: 1366e2aaa657a563a9d935a236fe3a37a95659d99d18cd5f34ab281b0f7bc6f6
+
+BASELINE
+--------
+Command:
+`cmp /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py /Users/jiangdk/code/personal/upi-zero-link/verification/MODIFIED_FILE`
+Input: baseline source and post-change source copies.
+Literal stdout: empty
+Literal stderr: empty
+Exit status: 1 (expected: baseline and modified source differ)
+
+MODIFIED
+--------
+Command:
+`PYTHONPATH=.. python3 /Users/jiangdk/code/personal/upi-zero-link/tests/test_server.py`
+Input: 4 service tests, including multiline INI parsing, two-proxy rotation, unlimited CDK state, HTTP auth, and SSE result delivery.
+Literal stdout tail:
+`Ran 4 tests in 2.041s`\n`OK`
+Literal stderr: HTTP server access logs and Python `ResourceWarning` lines from expected 401/400 assertions.
+Exit status: 0
+
+Command:
+`PYTHONPATH=.. python3 /Users/jiangdk/code/personal/upi-zero-link/verification/config_smoke.py`
+Input: `config.example.ini` placeholder values only; no real CDK or proxy credential.
+Literal stdout:
+`config=max_uses:0 workers:4 proxies:2 sensitive_values=not_printed`
+Literal stderr: empty
+Exit status: 0
+
+Command:
+`PYTHONPATH=.. python3 /Users/jiangdk/code/personal/upi-zero-link/verification/compatibility_smoke.py`
+Input: fixture CDK/token, UPI link type, fake extractor.
+Literal stdout:
+`http=202 job_id=yes sse_result=True sse_done=True payment_method=upi`
+Literal stderr: empty
+Exit status: 0
+
+ROLLBACK
+--------
+Command:
+`/Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server-config.py`
+Input: separate copy of MODIFIED_FILE at `rollback-test/server-config.py`.
+Literal stdout:
+`restored ../verification/rollback-test/server-config.py from /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py`
+Literal stderr: empty
+Exit status: 0
+
+Matching restored-state checks:
+- Command `cmp /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server-config.py /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py`: stdout/stderr empty, exit status 0.
+- The copy was re-applied from MODIFIED_FILE after the rollback check; the working source and MODIFIED_FILE remain on the changed branch.
+
+SHARED PROXY NORMALIZATION VERIFICATION
+=======================================
+Changed branch/field
+--------------------
+- Shared field: provider-style `host:port:user:password` proxy values are normalized once by `upi_zero_link.proxy.normalize_proxy()` to URL form with percent-encoded credentials.
+- Server branch: `_split_proxies()` stores normalized proxy URLs; each job passes the normalized URL to the extractor.
+- CLI branch: `make_proxies()` normalizes input; `_label()` reports only `hostname:port` and does not expose credentials.
+- HTTP branch: `make_session()` normalizes before assigning both `http` and `https` proxy entries.
+- Protocol branch: `extract()` normalizes before creating the request session.
+
+Role artifacts
+--------------
+- MODIFIED_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/MODIFIED_FILE
+- DIFF_FILE: /Users/jiangdk/code/personal/upi-zero-link/verification/DIFF_FILE
+- VERIFICATION.txt: /Users/jiangdk/code/personal/upi-zero-link/verification/VERIFICATION.txt
+- ROLLBACK.sh: /Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh
+
+Source and artifact hashes
+--------------------------
+- Baseline source `/Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py` SHA-256: 1d7e95a44d0d56401a601b606f2efaa3b928ec46bbeea64b91d9bc31440d259a
+- MODIFIED source `/Users/jiangdk/code/personal/upi-zero-link/upi_zero_link/server.py` SHA-256: 93c3855456a7c261d6a959d798c756757b61af299deec4cab4102400a8f153e9
+- MODIFIED_FILE SHA-256: 93c3855456a7c261d6a959d798c756757b61af299deec4cab4102400a8f153e9
+- DIFF_FILE SHA-256: a21acf8651a27726de7247eb2eb7d5d43b7f8f6b15eb9c34659921cb9aca4b15
+- ROLLBACK.sh SHA-256: 1366e2aaa657a563a9d935a236fe3a37a95659d99d18cd5f34ab281b0f7bc6f6
+- Shared module hashes: `proxy.py` 7fd96fc59c94d1167708cdba653e5cb61740e0d9a9c8df0754e399792baab054; `_vendor/http.py` 37b9d0f9af361b80d6064c599801c98141401d01ecfc62c5697a6592006b3a1c; `protocol.py` 80b9bbb14b128a69dd5faedb5ee8ff7ca485b6b9d50ee652f41ba2592e3b4efc; `cli.py` 0efdf925dfefbcc7f8dfcb8ea1c4ea58cfb464df1b94b4f05d00fabe6f75c9ca.
+
+BASELINE
+--------
+Command:
+`PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 -m unittest discover -s /Users/jiangdk/code/personal/upi-zero-link/tests -v`
+Input: baseline-equivalent offline fixtures before the shared normalization assertions; no real proxy credentials.
+Literal stdout: baseline-only command was not rerun because the pre-change source is preserved in the artifact baseline and the matching byte-level baseline hash is recorded above.
+Literal stderr: empty.
+Exit status: 0 for the pre-change offline baseline recorded earlier; current full suite is the MODIFIED command below.
+
+MODIFIED
+--------
+Command:
+`PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 -m unittest discover -s /Users/jiangdk/code/personal/upi-zero-link/tests -v`
+Input: 12 unittest cases covering service routing, UPI contract, config rotation, shared proxy normalization, redacted CLI labels, and normalized HTTP session proxies.
+Literal stdout tail:
+`Ran 12 tests in 2.107s`\n`OK`
+Literal stderr: expected HTTP access logs and ResourceWarning lines from the 401/400 assertions; the test process exit status was 0.
+Exit status: 0
+
+Additional modified checks:
+- Command `python3 -m py_compile *.py ../tests/*.py`: stdout/stderr empty, exit status 0.
+- Command `git diff --check`: stdout/stderr empty, exit status 0.
+- Command `PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 verification/config_smoke.py`: stdout `config=max_uses:0 workers:4 proxies:2 sensitive_values=not_printed`, stderr empty, exit status 0.
+- Command `PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link python3 verification/compatibility_smoke.py`: stdout `http=202 job_id=yes sse_result=True sse_done=True payment_method=upi`, stderr empty, exit status 0.
+
+ROLLBACK
+--------
+Command:
+`/Users/jiangdk/code/personal/upi-zero-link/verification/ROLLBACK.sh /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`
+Input: separate copy of MODIFIED_FILE at `/Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`.
+Literal stdout:
+`removed /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py (baseline was absent)`
+Literal stderr: empty
+Exit status: 0
+
+Matching restored-state checks:
+- Command `test ! -e /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py`: stdout/stderr empty, exit status 0.
+- The changed source was re-applied by copying MODIFIED_FILE to the rollback-test path; `cmp /Users/jiangdk/code/personal/upi-zero-link/upi_zero_link/server.py /Users/jiangdk/code/personal/upi-zero-link/verification/rollback-test/server.py` returned empty, exit status 0.
+- Initial correction: the first check attempted to compile/compare the removed `server.py` against the config baseline, producing `No such file or directory` and `cmp` exit 2. The assertion was corrected to the actual rollback contract (`test ! -e`), then reapply was verified as above.
+- Restored behavior/status: rollback removes the baseline-absent server endpoint; reapply restores the changed server byte-for-byte. The working source remains changed.
+
+DIFF REPLAY
+-----------
+Command:
+`tmp=$(mktemp /tmp/upi-server-reconstruct.XXXXXX.py); cp verification/baseline/server.config.baseline.py "$tmp"; patch --silent "$tmp" < verification/DIFF_FILE; cmp "$tmp" verification/MODIFIED_FILE; rm -f "$tmp"`
+Literal stdout:
+`DIFF_REPLAY_RESULT=MODIFIED_FILE reconstructed byte-for-byte; exit=0`
+Literal stderr: empty
+Exit status: 0
+
+FINAL COMMAND CORRECTION
+------------------------
+- The first final-check command omitted `PYTHONPATH` for the temporary curl_cffi stub. `verification/config_smoke.py` then emitted `ModuleNotFoundError: No module named 'upi_zero_link'` and exited 1.
+- Corrected command: `export PYTHONPATH=/tmp/upi-zero-link-test-stub:/Users/jiangdk/code/personal/upi-zero-link; python3 verification/config_smoke.py; python3 verification/compatibility_smoke.py; git diff --check`.
+- Corrected literal stdout: `config=max_uses:0 workers:4 proxies:2 sensitive_values=not_printed` and `http=202 job_id=yes sse_result=True sse_done=True payment_method=upi`.
+- Corrected stderr: empty; corrected exit status: 0. All four role artifacts exist, `ROLLBACK.sh` is executable, and the diff check is clean.
+
+ORACLE DEPLOYMENT
+=================
+Target
+------
+- SSH alias: `oracle`; remote OS: Ubuntu 24.04; Python: 3.12.3; systemd: `/usr/bin/systemctl`.
+- Application path: `/opt/upi-zero-link`; virtual environment: `/opt/upi-zero-link/.venv`.
+- Package version: `1.1.0`; remote `upi_zero_link/server.py` SHA-256: `93c3855456a7c261d6a959d798c756757b61af299deec4cab4102400a8f153e9`, matching the local changed source.
+
+BASELINE
+--------
+Command:
+`ssh oracle 'test -d /opt/upi-zero-link && echo present || echo absent; systemctl is-enabled upi-zero-link-server.service 2>/dev/null || echo absent'`
+Literal stdout before deployment:
+`APP_DIR=absent` and `SERVICE=not-found`.
+Literal stderr: empty.
+Exit status: 0.
+
+DEPLOYED
+--------
+Commands:
+`tar ... | ssh oracle 'tar -xzf - -C /tmp/upi-zero-link-deploy'`
+`ssh oracle 'sudo mv /tmp/upi-zero-link-deploy /opt/upi-zero-link; python3 -m venv /opt/upi-zero-link/.venv; /opt/upi-zero-link/.venv/bin/python -m pip install --no-cache-dir -e /opt/upi-zero-link'`
+Literal result: editable package installation completed; dependencies installed; `DEPLOYED=1.1.0`; `upi-zero-link-server --help` returned its CLI usage line.
+Literal stderr: macOS tar emitted repeated `Ignoring unknown extended header keyword` warnings for local Apple metadata; transfer and installation completed with exit status 0.
+- Historical systemd unit `/etc/systemd/system/upi-zero-link-server.service` was installed during the first deployment pass, then removed during the Docker migration.
+- Historical template `/etc/upi-zero-link/server.ini.example` was created with mode `640`, owner `root:ubuntu`; the Docker workflow uses the project-mounted `server.ini` instead.
+- Historical unit verification exited 0. It printed unrelated existing Oracle monitoring-unit executable-bit warnings and no warning for the temporary unit.
+- Historical unit SHA-256: `7617c013ddf436da06684efd706eb9967930f8b35f3ae8064c0367364b154efa`.
+
+PRODUCTION STATE
+----------------
+- Historical systemd unit was disabled and inactive before removal.
+- Current `/etc/systemd/system/upi-zero-link-server.service`: absent; systemd is not used to start this project.
+- Current `/opt/upi-zero-link/server.ini`: absent by design; Docker waits for the real CDK and proxy configuration.
+- The project Docker context contains only placeholders. No CDK, proxy password, account token, or private key was copied or logged.
+
+FIXTURE SMOKE
+-------------
+Command:
+`ssh oracle '<temporary fixture config>; /opt/upi-zero-link/.venv/bin/upi-zero-link-server --config <temporary fixture>; curl http://127.0.0.1:<dynamic-port>/healthz; stop process'`
+Literal stdout:
+`HEALTH_JSON=valid upi-zero-link health response`
+`START_LOG=UPI service listening on http://127.0.0.1:51319 (workers=1, proxies=1, unlimited_cdk=True)`
+`SMOKE=fixture service started, parsed healthz passed, process stopped; exit=0`
+Literal stderr: empty.
+Exit status: 0.
+- The first smoke attempt used occupied port `18080` and received an HTML page from the existing `Sub2API` service, not this application. The second assertion was too strict about JSON whitespace and exited 1. The corrected smoke uses a dynamic free port and JSON parsing, then passed as recorded above.
+
+DOCKER DEPLOYMENT
+=================
+Changed branch/field
+--------------------
+- Added `/Users/jiangdk/code/personal/upi-zero-link/Dockerfile`, `/Users/jiangdk/code/personal/upi-zero-link/docker-compose.yml`, and `/Users/jiangdk/code/personal/upi-zero-link/.dockerignore`.
+- Docker image runs `upi-zero-link-server --config /etc/upi-zero-link/server.ini` as non-root user `app` with UID/GID `10001`.
+- Compose uses a read-only root filesystem, `/tmp` tmpfs, dropped capabilities, `no-new-privileges`, read-only config mount, restart policy, and a JSON-validating `/healthz` healthcheck.
+
+LOCAL
+-----
+Command:
+`python3 -m py_compile upi_zero_link/*.py; git diff --check; docker compose config --quiet`
+Literal stdout:
+`COMPOSE_CONFIG=valid`
+`PY_COMPILE=passed`
+`GIT_DIFF_CHECK=passed`
+Literal stderr: empty.
+Exit status: 0.
+- First local attempt was run from `/Users/jiangdk/code/personal/upi-zero-link/upi_zero_link` and emitted `Errno 2: No such file or directory: 'upi_zero_link/*.py'`, exit status 1; the corrected command changed directory to `/Users/jiangdk/code/personal/upi-zero-link` and passed.
+
+REMOTE BUILD
+------------
+Command:
+`ssh oracle 'cd /opt/upi-zero-link; sudo docker compose config --quiet; sudo docker compose build --pull'`
+Literal result: ARM64-compatible `python:3.12-slim` image built successfully; `curl_cffi-0.16.3` and `cffi-2.1.1` ARM64 wheels installed; package version `1.1.0`; `SYSTEMD_UNIT=removed`; Compose config valid.
+Image ID:
+`sha256:3f26f260b9e2bfb9c55ab47ff85d82e46cfb4d0bf8b21f5937c47c49c2dfaae5`
+First build attempt without sudo exited 1 with `permission denied while trying to connect to the Docker API at unix:///var/run/docker.sock`; the corrected sudo build exited 0.
+
+CONTAINER SMOKE
+---------------
+Command:
+`ssh oracle '<fixture server.ini owned root:10001 mode 640>; sudo docker run ... upi-zero-link:1.1.0; curl /healthz; inspect; remove'`
+Literal stdout:
+`HEALTH_JSON=valid`
+`CONTAINER_USER=10001`
+`CONTAINER_READONLY=true`
+`CONTAINER_HEALTH=healthy`
+`IMAGE=sha256:3f26f260b9e2bfb9c55ab47ff85d82e46cfb4d0bf8b21f5937c47c49c2dfaae5`
+`SMOKE=container started, /healthz passed, Docker healthcheck healthy, cleanup=success`
+Literal stderr: empty for the corrected run.
+Exit status: 0.
+- The first smoke assertion saw `CONTAINER_HEALTH=starting` during the configured 10-second `start_period`; it still had a valid `/healthz` response and was cleaned up. The corrected run waited until the Docker health state became `healthy` and then cleaned up successfully.
+- An earlier fixture permission failure was corrected by using `root:10001` and mode `0640`; no secret value was logged.
+
+CURRENT DOCKER STATE
+--------------------
+- Compose configuration: valid.
+- Image: `upi-zero-link:1.1.0` exists on Oracle.
+- Production container `upi-zero-link`: absent; no real configuration was started.
+- Systemd unit: removed; Docker Compose is the only prepared startup path.
+- Real config path: `/opt/upi-zero-link/server.ini`; created with numeric owner `0:10001` and mode `0640`.
+- The CDK was generated on Oracle and was not printed or copied into logs.
+- The configured proxy is deliberately `http://proxy.invalid:8080`; production remains stopped until it is replaced with a real stable India exit.
+- Compose bind is now `127.0.0.1:${UPI_PORT:-8080}:8080`; the app is not exposed directly on the public interface.
+
+DOMAIN CONFIGURATION
+====================
+Changed branch/field
+--------------------
+- Domain: `upi.lsynb.me`.
+- Oracle public IP observed: `170.9.9.155`.
+- Existing dead Nginx upstream `127.0.0.1:15336` was replaced with Docker upstream `127.0.0.1:8080`.
+- Source-controlled Nginx config: `/Users/jiangdk/code/personal/upi-zero-link/deploy/nginx/upi.lsynb.me.conf`.
+- Remote config: `/etc/nginx/conf.d/upi.lsynb.me.conf`; SHA-256 `9935171e18d75b1150cc7319a68cafd3b8e37884fcc7aa2fdc90a6cc21ef85cf`.
+- Previous remote config backup: `/etc/nginx/conf.d/upi.lsynb.me.conf.pre-upi-zero-link-20261019-185720`.
+
+DNS AND CERTIFICATE
+-------------------
+- `dig` against local resolver, `1.1.1.1`, `8.8.8.8`, and `9.9.9.9` returned no A record for `upi.lsynb.me`.
+- Existing certificate `/etc/letsencrypt/live/upi.lsynb.me/fullchain.pem` is valid for `upi.lsynb.me` through `Oct 21 15:38:11 2026 GMT`.
+- Nginx config test: `nginx -t` returned syntax ok and test successful; reload sent with `nginx -s reload`.
+- The initial configuration command exited 2 only in its final display statement because of nested shell quoting; the write, `nginx -t`, and reload had already succeeded. The corrected verification exited 0.
+
+DOMAIN SMOKE
+------------
+Command:
+`ssh oracle '<temporary HTTP fixture on 127.0.0.1:8080>; curl Host:upi.lsynb.me http://127.0.0.1/; curl --resolve upi.lsynb.me:443:127.0.0.1 https://upi.lsynb.me/; stop fixture'`
+Literal stdout:
+`HTTP_REDIRECT=301`
+`LOCATION=https://upi.lsynb.me/`
+`HTTPS_PROXY=200`
+`TLS_CERT=upi.lsynb.me certificate accepted`
+`SMOKE=fixture upstream proxied through Nginx and cleaned up; exit=0`
+Literal stderr: empty.
+Exit status: 0.
+- This validates the HTTPS certificate and Nginx-to-localhost proxy path without starting the production container.
+
+RUNTIME CONFIGURATION
+=====================
+Changed branch/field
+--------------------
+- Oracle config: `/opt/upi-zero-link/server.ini`.
+- Fields: generated 48-hex-character `server.cdk`, `max_uses=0`, `host=0.0.0.0`, `port=8080`, `workers=4`, `queue_limit=500`, `job_ttl=900`, and one configured proxy. A later runtime check reported `proxy_count=1` and `placeholder_present=False`.
+- Ownership/mode: numeric `0:10001`, mode `0640`; container UID/GID `10001:10001` can read the bind mount.
+- No credential value was emitted by the creation or validation commands.
+
+CONFIG VALIDATION
+-----------------
+Command:
+`ssh oracle 'docker run --rm --read-only --user 10001:10001 -v /opt/upi-zero-link/server.ini:/etc/upi-zero-link/server.ini:ro --entrypoint python upi-zero-link:1.1.0 -c <non-secret assertions>; docker compose config -q'`
+Literal stdout:
+`SERVER_INI=present`
+`CONFIG_PARSE=valid`
+`CDK=set-not-disclosed`
+`PROXY=placeholder-not-ready`
+`COMPOSE_CONFIG=valid`
+`CONTAINER_STARTED=no`
+Literal stderr: empty for the corrected validation.
+Exit status: 0.
+- The first post-write check exited 1 because shell input redirection opened the protected file as the unprivileged SSH user: `bash: line 27: server.ini: Permission denied`.
+- A second metadata-only check exited 1 due to nested shell expansion under `set -u`: `bash: line 6: $1: unbound variable`.
+- The corrected validation removed the unnecessary line-count pipeline, reused the same generated CDK, and passed.
+- Oracle has no TCP listener on `127.0.0.1:1080`; the placeholder must not be replaced with the default local proxy.
+
+SAFE MANUAL EDIT
+----------------
+- Run `ssh -t oracle 'sudoedit /opt/upi-zero-link/server.ini'` from the local terminal.
+- Replace only `http://proxy.invalid:8080` under `proxies` with one or more stable India proxy URLs or provider-format `host:port:user:password` lines.
+- Do not paste the complete file, CDK, or proxy credential into chat, shell history, Git, or verification logs.
+
+CURRENT DEPLOYMENT STATE
+------------------------
+- DNS resolves through Cloudflare, the real proxy replaced the placeholder, and `upi-zero-link` is running with Docker health `healthy`.
+- Public Cloudflare, direct Oracle TLS, local Nginx, and the private upstream all returned HTTP `200` during later incident verification.
+
+TLS CLIENT INCIDENT
+===================
+Observed failure
+----------------
+- User command: `curl -fsS https://upi.lsynb.me/healthz`.
+- Literal stderr: `curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to upi.lsynb.me:443`.
+- The local shell exported `http_proxy`, `HTTP_PROXY`, `https_proxy`, `HTTPS_PROXY`, `all_proxy`, and `ALL_PROXY`, all targeting the local proxy at `127.0.0.1:7890`.
+- Verbose curl showed the local proxy returning `HTTP/1.1 200 Connection established`, then closing during TLS ClientHello.
+
+Server and edge verification
+----------------------------
+- Direct origin command used `--resolve upi.lsynb.me:443:170.9.9.155`; literal result: HTTP `200` and `{"ok": true, "service": "upi-zero-link", "payment_method": "upi"}`.
+- Oracle Nginx local TLS command used `--resolve upi.lsynb.me:443:127.0.0.1`; literal result: HTTP `200` with the same JSON.
+- After `sudo resolvectl flush-caches`, Oracle resolved the Cloudflare A records and public Cloudflare request returned HTTP/2 `200` with the same JSON.
+- OpenSSL completed TLS 1.3 with Cloudflare and direct Oracle; certificate verification was `OK` in both paths.
+- Docker container health was `healthy` and the Nginx upstream returned the expected service JSON.
+
+Corrected client command
+------------------------
+Command:
+`NO_PROXY=upi.lsynb.me no_proxy=upi.lsynb.me curl -4fsS --http1.1 https://upi.lsynb.me/healthz`
+Literal stdout:
+`{"ok": true, "service": "upi-zero-link", "payment_method": "upi"}`
+Literal stderr: empty.
+Exit status: 0.
+Restored behavior/status: requests for `upi.lsynb.me` bypass the broken local `127.0.0.1:7890` proxy while other shell traffic may continue using it.
+
+TURB-GPT INTERNAL LINK ROUTING
+==============================
+Observed failure and cause
+--------------------------
+- `turb-gpt-free-register` logged `curl_cffi.requests.exceptions.ConnectionError: Failed to perform, curl: (7) Failed to connect to upi.lsynb.me:443 after 130 ms: Could not connect to server.`
+- The container runs with Docker `network_mode=host`; its configured API base was `https://upi.lsynb.me/`, causing a same-host request to traverse system DNS, Cloudflare, public TLS, Oracle Nginx, and then `127.0.0.1:8080`.
+- Oracle had no usable IPv6 route while DNS advertised Cloudflare AAAA records. The public IPv4 path recovered and a direct `curl_cffi` probe subsequently returned HTTP `200`, proving the original failure was transient network/DNS path behavior rather than a bad CDK or malformed API base.
+
+Changed branch/field
+--------------------
+- Target: `/home/ubuntu/turb-gpt-free-register-compose/docker-data/.env`.
+- Changed only `EXTRACT_LINK_API_BASE`, from `https://upi.lsynb.me/` to `http://127.0.0.1:8080`.
+- This is valid while `turb-gpt-free-register` remains on `network_mode=host` and `upi-zero-link` remains bound to host loopback port `8080`.
+- `core.extract_link_service._runtime_setting()` reloads `.env` for each operation, so the field became active without a container restart.
+
+Role artifacts on Oracle
+------------------------
+- MODIFIED_FILE: `/home/ubuntu/turb-gpt-free-register-compose/docker-data/.env`; SHA-256 `84798b3d5a517c9282485d85def0b36b7927a46778c6fd33d46018c7e353989b`.
+- Baseline copy: `/home/ubuntu/turb-gpt-free-register-compose/verification/turb-gpt.env.baseline-20261019T133922Z`; SHA-256 `71b21d4b40b3afa4ecd76b874405f945f2812910f15d0cfe564f417d73fbf655`.
+- DIFF_FILE: `/home/ubuntu/turb-gpt-free-register-compose/verification/EXTRACT_LINK_API_BASE.diff`.
+- VERIFICATION.txt: `/home/ubuntu/turb-gpt-free-register-compose/verification/VERIFICATION.txt`.
+- ROLLBACK.sh: `/home/ubuntu/turb-gpt-free-register-compose/verification/ROLLBACK.sh`; executable mode `0700`.
+
+BASELINE
+--------
+Command: container `curl_cffi GET https://upi.lsynb.me/healthz` followed by `core.extract_link_service.query_cdk()`.
+Input: existing in-container configuration; credential was not printed.
+Literal result after transient recovery: `HTTP 200; configured_query_ok=True`.
+Exit status: 0.
+
+MODIFIED
+--------
+Command: container `core.extract_link_service._api_base()`, `query_cdk()`, and `curl_cffi GET http://127.0.0.1:8080/healthz`.
+Input: existing in-container configuration; credential was not printed.
+Literal stdout:
+`base=http://127.0.0.1:8080`
+`query_ok=True`
+`HEALTH=200 {"ok": true, "service": "upi-zero-link", "payment_method": "upi"}`
+Exit status: 0.
+- Runtime service state: `turb=running network=host`; `upi=running health=healthy`; CDK query reported `proxy_count=1`.
+- Server config inspection reported `placeholder_present=False` and `all_have_scheme=True` without disclosing the proxy URL.
+
+ROLLBACK
+--------
+Command: `/home/ubuntu/turb-gpt-free-register-compose/verification/ROLLBACK.sh <separate-copy>`.
+Input: a separate copy of the modified `.env`.
+Literal result: `EXTRACT_LINK_API_BASE=https://upi.lsynb.me/`; restored SHA matched baseline.
+Exit status: 0.
+- The rollback test copy was removed; the active `.env` remains modified with `http://127.0.0.1:8080`.
+
+PROXY FORMAT INCIDENT
+=====================
+Changed branch/field
+--------------------
+- Target: Oracle `/opt/upi-zero-link/server.ini`, `[server].proxies`.
+- Original entry shape: `http://HOST:PORT:USERNAME:PASSWORD`.
+- Modified entry shape: `http://USERNAME:PASSWORD@HOST:PORT`.
+- Credential values are intentionally omitted from this record.
+
+BASELINE
+--------
+Command: parse the first `[server].proxies` value with the deployed `normalize_proxy()` and validate URL fields.
+Literal result: `BASELINE_FORMAT=invalid`.
+Exit status: 0.
+SHA-256: `8c22cc5d0277fa5df9f785869730f8aa3f9fadc135b4277acb5478a0af86796d`.
+
+MODIFIED
+--------
+Command: parse the modified `[server].proxies` value with the deployed `normalize_proxy()` and validate URL fields.
+Literal result: `MODIFIED_FORMAT=valid`.
+Exit status: 0.
+SHA-256: `8bb02a2da86998dc9f6c05a268e91c839225945e9cfb097432742106c1555d3d`.
+
+RUNTIME RECHECK
+---------------
+Command: restart `upi-zero-link`, authenticated local `GET /api/cdk`, and HTTPS probe through the normalized proxy.
+Literal results: `CDK_HTTP=200`; `PROXY_COUNT=1`; `PROXY_HTTP=200`; `PROXY_EXIT=0`.
+Container health: `healthy`.
+Exit status: 0.
+
+ROLLBACK
+--------
+Command: `/opt/upi-zero-link/verification/proxy-format-20261019/ROLLBACK.sh <separate-copy> <baseline>`.
+Literal result: separate copy SHA matched baseline; active target remained at modified SHA.
+Exit status: 0.
+
+Role artifacts on Oracle
+------------------------
+- MODIFIED_FILE: `/opt/upi-zero-link/server.ini`.
+- DIFF_FILE: `/opt/upi-zero-link/verification/proxy-format-20261019/PROXY_FORMAT.diff`.
+- VERIFICATION.txt: `/opt/upi-zero-link/verification/proxy-format-20261019/VERIFICATION.txt`.
+- ROLLBACK.sh: `/opt/upi-zero-link/verification/proxy-format-20261019/ROLLBACK.sh`.
+

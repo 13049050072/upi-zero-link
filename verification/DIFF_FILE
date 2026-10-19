@@ -1,0 +1,230 @@
+--- /Users/jiangdk/code/personal/upi-zero-link/verification/baseline/server.config.baseline.py	2026-10-19 14:19:23
++++ /Users/jiangdk/code/personal/upi-zero-link/upi_zero_link/server.py	2026-10-19 16:41:59
+@@ -12,6 +12,7 @@
+ from __future__ import annotations
+ 
+ import argparse
++import configparser
+ import json
+ import os
+ import threading
+@@ -21,14 +22,80 @@
+ from dataclasses import dataclass, field
+ from http import HTTPStatus
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+-from typing import Any, Callable, Iterator
++from pathlib import Path
++from typing import Any, Callable, Iterable, Iterator
+ from urllib.parse import parse_qs, urlsplit
+ 
++from .proxy import normalize_proxy
+ 
+-PAYMENT_METHOD = "upi"
+ DEFAULT_PROXY = os.environ.get("UPI_PROXY", "socks5h://127.0.0.1:1080")
++PAYMENT_METHOD = "upi"
+ 
+ 
++def _split_proxies(value: str | Iterable[str] | None) -> list[str]:
++    if value is None:
++        return []
++    values = [value] if isinstance(value, str) else value
++    proxies = []
++    for item in values:
++        for proxy in str(item).replace(",", "\n").splitlines():
++            proxy = proxy.strip()
++            if proxy:
++                proxies.append(normalize_proxy(proxy))
++    return proxies
++
++
++def load_server_config(path: str | None) -> dict[str, str]:
++    """Read the optional [server] INI section without logging secret values."""
++    if not path:
++        return {}
++    config_path = Path(path).expanduser()
++    if not config_path.is_file():
++        raise ValueError("服务端配置文件不存在: %s" % config_path)
++    parser = configparser.ConfigParser(interpolation=None)
++    parser.read(config_path, encoding="utf-8")
++    if not parser.has_section("server"):
++        raise ValueError("配置文件必须包含 [server] 段: %s" % config_path)
++    return {key.strip().lower(): value.strip() for key, value in parser.items("server")}
++
++
++def _config_text(config: dict[str, str], key: str, *env_names: str, default: str = "") -> str:
++    value = config.get(key, "").strip()
++    if value:
++        return value
++    for name in env_names:
++        value = os.environ.get(name, "").strip()
++        if value:
++            return value
++    return default
++
++
++def _config_int(config: dict[str, str], key: str, *env_names: str,
++                default: int, minimum: int, maximum: int) -> int:
++    raw = _config_text(config, key, *env_names, default=str(default))
++    try:
++        value = int(raw)
++    except ValueError as exc:
++        raise ValueError("server.%s 必须是整数" % key) from exc
++    if not minimum <= value <= maximum:
++        raise ValueError("server.%s 必须在 %d-%d 之间" % (key, minimum, maximum))
++    return value
++
++
++def _configured_proxies(cli_proxies: list[str] | None, config: dict[str, str]) -> list[str]:
++    if cli_proxies is not None:
++        proxies = _split_proxies(cli_proxies)
++    else:
++        raw = _config_text(
++            config,
++            "proxies",
++            "UPI_SERVER_PROXIES",
++            default=_config_text(config, "proxy", "UPI_SERVER_PROXY", default=DEFAULT_PROXY),
++        )
++        proxies = _split_proxies(raw)
++    return proxies or [DEFAULT_PROXY]
++
++
+ def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+     try:
+         value = int(os.environ.get(name, str(default)))
+@@ -138,6 +205,7 @@
+         *,
+         cdk: str,
+         proxy: str = DEFAULT_PROXY,
++        proxies: Iterable[str] | None = None,
+         workers: int = 1,
+         queue_limit: int = 500,
+         max_uses: int = 0,
+@@ -145,7 +213,11 @@
+         job_ttl: int = 900,
+     ) -> None:
+         self.quota = _Quota(cdk, max_uses=max_uses)
+-        self.proxy = proxy.strip() or DEFAULT_PROXY
++        configured_proxies = _split_proxies(proxies) if proxies is not None else _split_proxies(proxy)
++        self.proxies = tuple(configured_proxies or [DEFAULT_PROXY])
++        self.proxy = self.proxies[0]
++        self._proxy_index = 0
++        self._proxy_lock = threading.Lock()
+         self.queue_limit = max(1, queue_limit)
+         self.job_ttl = max(60, job_ttl)
+         self.extractor = extractor or _default_extractor
+@@ -155,6 +227,12 @@
+         self.jobs: dict[str, _Job] = {}
+         self.lock = threading.Lock()
+ 
++    def _next_proxy(self) -> str:
++        with self._proxy_lock:
++            proxy = self.proxies[self._proxy_index % len(self.proxies)]
++            self._proxy_index += 1
++            return proxy
++
+     def _prune(self) -> None:
+         cutoff = time.time() - self.job_ttl
+         with self.lock:
+@@ -193,7 +271,7 @@
+                 job_id=uuid.uuid4().hex,
+                 token=token.strip(),
+                 email=email.strip(),
+-                proxy=proxy.strip() or self.proxy,
++                proxy=proxy.strip() or self._next_proxy(),
+                 tries=tries,
+             )
+             self.jobs[job.job_id] = job
+@@ -308,7 +386,8 @@
+             if not self._authorize(query=query):
+                 self._error("CDK 无效", HTTPStatus.UNAUTHORIZED)
+                 return
+-            self._send_json({"ok": True, **self.state.quota.snapshot()})
++            self._send_json({"ok": True, **self.state.quota.snapshot(),
++                             "proxy_count": len(self.state.proxies)})
+             return
+         prefix = "/api/jobs/"
+         suffix = "/events"
+@@ -396,39 +475,57 @@
+ 
+ def build_parser() -> argparse.ArgumentParser:
+     parser = argparse.ArgumentParser(description="UPI 提链兼容服务端（JSON + SSE）")
+-    parser.add_argument("--host", default=os.environ.get("UPI_SERVER_HOST", "127.0.0.1"))
+-    parser.add_argument("--port", type=int, default=_int_env("UPI_SERVER_PORT", 8080, 1, 65535))
+-    parser.add_argument("--cdk", default=os.environ.get("UPI_SERVER_CDK") or os.environ.get("UPI_CDK", ""),
+-                        help="服务端 CDK；也可用 UPI_SERVER_CDK")
+-    parser.add_argument("--proxy", default=os.environ.get("UPI_SERVER_PROXY") or DEFAULT_PROXY,
+-                        help="服务端默认印度出口代理")
+-    parser.add_argument("--workers", type=int, choices=(1, 2, 3, 4),
+-                        default=_int_env("UPI_SERVER_WORKERS", 1, 1, 4),
+-                        help="后台并发数，范围 1-4")
+-    parser.add_argument("--queue-limit", type=int,
+-                        default=_int_env("UPI_SERVER_QUEUE_LIMIT", 500, 1, 5000))
+-    parser.add_argument("--max-uses", type=int,
+-                        default=_int_env("UPI_SERVER_CDK_MAX_USES", 0, 0, 1000000),
++    parser.add_argument("--config", default=os.environ.get("UPI_SERVER_CONFIG", ""),
++                        help="服务端 INI 配置文件，使用 [server] 段")
++    parser.add_argument("--host", default=None)
++    parser.add_argument("--port", type=int, default=None)
++    parser.add_argument("--cdk", default=None,
++                        help="服务端 CDK；也可放在配置文件或 UPI_SERVER_CDK")
++    parser.add_argument("--proxy", action="append", default=None,
++                        help="服务端默认印度出口，可重复；也可放在配置文件 proxies")
++    parser.add_argument("--workers", type=int, choices=(1, 2, 3, 4), default=None,
++                        help="后台并发数，范围 1-4")
++    parser.add_argument("--queue-limit", type=int, default=None)
++    parser.add_argument("--max-uses", type=int, default=None,
+                         help="CDK 成功次数上限；0 表示不限")
+-    parser.add_argument("--job-ttl", type=int,
+-                        default=_int_env("UPI_SERVER_JOB_TTL", 900, 60, 86400))
++    parser.add_argument("--job-ttl", type=int, default=None)
+     return parser
+ 
+ 
+ def main(argv=None) -> int:
+-    args = build_parser().parse_args(argv)
+-    if not str(args.cdk).strip():
+-        raise SystemExit("必须通过 --cdk 或 UPI_SERVER_CDK 配置服务端 CDK")
++    parser = build_parser()
++    args = parser.parse_args(argv)
++    try:
++        config = load_server_config(args.config)
++        host = args.host or _config_text(config, "host", "UPI_SERVER_HOST", default="127.0.0.1")
++        port = args.port if args.port is not None else _config_int(
++            config, "port", "UPI_SERVER_PORT", default=8080, minimum=1, maximum=65535)
++        cdk = args.cdk if args.cdk is not None else _config_text(
++            config, "cdk", "UPI_SERVER_CDK", "UPI_CDK")
++        proxies = _configured_proxies(args.proxy, config)
++        workers = args.workers if args.workers is not None else _config_int(
++            config, "workers", "UPI_SERVER_WORKERS", default=1, minimum=1, maximum=4)
++        queue_limit = args.queue_limit if args.queue_limit is not None else _config_int(
++            config, "queue_limit", "UPI_SERVER_QUEUE_LIMIT", default=500, minimum=1, maximum=5000)
++        max_uses = args.max_uses if args.max_uses is not None else _config_int(
++            config, "max_uses", "UPI_SERVER_CDK_MAX_USES", default=0, minimum=0, maximum=1000000)
++        job_ttl = args.job_ttl if args.job_ttl is not None else _config_int(
++            config, "job_ttl", "UPI_SERVER_JOB_TTL", default=900, minimum=60, maximum=86400)
++    except ValueError as exc:
++        parser.error(str(exc))
++    if not cdk.strip():
++        parser.error("必须通过 --cdk、配置文件 server.cdk 或 UPI_SERVER_CDK 配置服务端 CDK")
+     state = ServerState(
+-        cdk=args.cdk,
+-        proxy=args.proxy,
+-        workers=args.workers,
+-        queue_limit=args.queue_limit,
+-        max_uses=args.max_uses,
+-        job_ttl=args.job_ttl,
++        cdk=cdk,
++        proxies=proxies,
++        workers=workers,
++        queue_limit=queue_limit,
++        max_uses=max_uses,
++        job_ttl=job_ttl,
+     )
+-    server = make_server(args.host, args.port, state)
+-    print("UPI service listening on http://%s:%d (workers=%d)" % (args.host, args.port, args.workers), flush=True)
++    server = make_server(host, port, state)
++    print("UPI service listening on http://%s:%d (workers=%d, proxies=%d, unlimited_cdk=%s)" % (
++        host, port, workers, len(proxies), max_uses == 0), flush=True)
+     try:
+         server.serve_forever()
+     except KeyboardInterrupt:

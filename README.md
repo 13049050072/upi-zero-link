@@ -37,9 +37,73 @@ python -m pip install -e .
 # 或者不装，直接： python -m upi_zero_link --help
 ```
 
-依赖：Python ≥ 3.10、`curl_cffi`、`requests`。
+依赖：Python ≥ 3.10、`curl_cffi`、`requests`。兼容服务端使用 Python 标准库 HTTP/SSE，不需要 Flask。
 
-## 用法
+## 兼容服务端
+
+当前项目可以直接作为 `turb-gpt-free-register` 的提链服务端。服务端固定只接受 `upi`，接口契约如下：
+
+```text
+POST /api/extract
+GET  /api/jobs/{job_id}/events?cdk=...
+GET  /api/cdk?code=...
+```
+
+准备服务端配置文件：
+
+```bash
+cp config.example.ini server.ini
+# 编辑 server.ini：填写自己的 cdk，并把 proxies 改成印度出口
+```
+
+配置文件格式是 INI，代理可写多条，服务端会按任务轮换。每条代理支持两种写法：标准 URL（如 `http://user:password@host:port` 或 `socks5h://user:password@host:port`），以及代理商常见的 `主机:端口:用户名:密码` 四段式；四段式会按 HTTP 代理自动转换。`max_uses = 0` 就是不限成功次数的自用 CDK。`server.ini` 已加入 `.gitignore`，不要把真实 CDK 或代理账号密码提交到仓库。
+
+启动服务端：
+
+```bash
+upi-zero-link-server --config server.ini
+```
+
+Docker 部署不使用 systemd：
+
+```bash
+cp config.example.ini server.ini
+# 编辑 server.ini，填写真实 CDK 和印度出口代理
+UPI_PORT=8080 docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 upi-zero-link
+```
+
+Oracle 上如果当前用户未加入 Docker socket 组，使用 `sudo docker compose ...` 执行上述命令。实际配置文件需要让容器组 `10001` 可读，例如：
+
+```bash
+sudo chown root:10001 server.ini
+sudo chmod 640 server.ini
+```
+
+`server.ini` 以只读方式挂载到容器内 `/etc/upi-zero-link/server.ini`。容器以非 root 用户运行，启用只读根文件系统、丢弃 Linux capabilities，并通过 `/healthz` 做 Docker 健康检查。Compose 默认只绑定宿主机 `127.0.0.1:${UPI_PORT:-8080}`，域名入口由 HTTPS 反向代理提供。
+
+也可以使用环境变量或命令行覆盖配置文件字段：
+
+```bash
+UPI_SERVER_CDK=<service_cdk> \
+UPI_SERVER_PROXIES='socks5h://user:pass@in-exit-1:port,socks5h://user:pass@in-exit-2:port' \
+upi-zero-link-server --workers 4
+```
+
+命令行优先级高于配置文件，配置文件高于环境变量。服务端代理只在请求没有显式 `proxy` 字段时使用；每个任务会选择下一条配置代理，并在整条 UPI 流程中保持不变。
+
+在 `turb-gpt-free-register` 的提链配置中填写：
+
+```text
+EXTRACT_LINK_API_BASE=https://upi.lsynb.me
+EXTRACT_LINK_CDK=<service_cdk>
+EXTRACT_LINK_TYPE=upi
+EXTRACT_LINK_WORKERS=4
+```
+
+服务端会校验 CDK，创建后台任务，并通过 SSE 推送 `log`、`result`、`error`、`done` 事件。`result` 会把本地结果映射为目标端需要的 `long_url`、`copy_paste`、`image_url_png`、`payment_method` 和 `expires_at` 字段。`max_uses = 0` 或 `UPI_SERVER_CDK_MAX_USES=0` 表示不限成功次数；大于 0 时才启用成功次数上限。`/api/cdk` 会返回 `unlimited: true`、代理数量和当前用量，但不会返回 CDK 或代理凭据。
+
 
 ```bash
 # 单账号
@@ -50,20 +114,34 @@ upi-zero-link --token <access_token> --email you@example.com \
 upi-zero-link --accounts accounts.json \
               --proxy socks5h://user:pass@in-exit-1:port \
               --proxy socks5h://user:pass@in-exit-2:port \
-              --rounds 4 --notify --out links.json
+              --rounds 4 --concurrency 4 --notify --out links.json
+
+# 使用提链服务 API；CDK 只作为请求凭据发送给服务端
+upi-zero-link --accounts accounts.json \
+              --service-url https://link-service.example/api/extract \
+              --cdk <service_cdk> --concurrency 4 --all
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--token` / `--accounts` | 账号 access_token，或账号 JSON 文件（见 `accounts.example.json`） |
 | `--email` | 用于 Stripe `billing_details` 的邮箱 |
-| `--proxy` | 印度出口，**可重复**；不传则取环境变量 `UPI_PROXY`（默认 `socks5h://127.0.0.1:1080`） |
+| `--proxy` | 印度出口，**可重复**；支持 `http(s)://...`、`socks5h://...` 和 `主机:端口:用户名:密码` 四段式；不传则取环境变量 `UPI_PROXY`（默认 `socks5h://127.0.0.1:1080`） |
+| `--service-url` / `--api-url` | 提链服务 API 地址；设置后使用服务模式，不设置则沿用本地协议流程 |
+| `--cdk` | 提链服务 CDK；服务模式下以 `Authorization: Bearer` 和 `X-CDK` 发送，也可在账号 JSON 中逐项设置 `cdk` |
+| `--concurrency` | 批量并发数，只接受 `1`、`2`、`3`、`4`（默认 `1`） |
 | `--rounds` | 每个号最多换几条出口（默认 4）。同一个号换出口重试是**有效**的，实测出现过「第一条出口 `nonzero_due`、换一条就出链」 |
 | `--tries` | 同一会话里 confirm 重试次数（1 或 2，默认 2） |
 | `--notify` | 出链时响铃 / 弹窗（Windows 用托盘气泡，其他平台终端响铃） |
 | `--out` | 结果落盘路径（默认 `links.json`） |
 | `--all` | 出链后继续跑完剩下的账号 |
 | `--quiet` | 只打结论 |
+
+本项目只实现 UPI。协议层和服务模式都固定发送 `upi`，不提供 pix、kakao_pay 或 ideal 选项。
+
+`--service-url` 与 `--api-url` 是同一个参数的两个名称。服务模式向该地址发送一个 JSON 请求，固定包含 `payment_method: "upi"`；响应可以直接是结果对象，也可以包装在 `data` 字段中。
+
+`--concurrency` 只限制同时运行的账号任务数，范围为 1–4。结果在主线程按账号文件顺序落盘，因此并发不会改变结果顺序。`--all` 仍决定是否在首条成功链后继续展示并保存后续成功结果。
 
 ## 出口代理（关键前提）
 
@@ -72,7 +150,7 @@ upi-zero-link --accounts accounts.json \
 
 1. 出口 IP 在印度（Stripe 侧会算印度税区，ChatGPT 侧走印度定价）；
 2. 支持长连接、单会话内不换出口；
-3. 代理 URL 形如 `socks5h://user:pass@host:port`（`http://` 也可）。
+3. 代理 URL 形如 `socks5h://user:pass@host:port`（`http://` 也可）；代理商提供的 `host:port:user:password` 四段式也可直接填，服务端会按 HTTP 代理转换。
 
 `--proxy` 给多条时按轮次轮换，用来对冲单条出口偶发的断连（curl 56/97/28）。
 
@@ -185,6 +263,7 @@ upi://mandate?ver=01&pa=openaillc.cfp@cashfreensdlpb&pn=OpenAI
 ```
 upi_zero_link/
   cli.py           命令行入口
+  server.py        兼容服务端（JSON + SSE）
   protocol.py      8 步提链流程
   verify.py        指引页核验（intent_state + fam）
   identity.py      账号指纹 / 请求头

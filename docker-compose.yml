@@ -1,0 +1,32 @@
+services:
+  upi-zero-link:
+    build:
+      context: .
+    image: upi-zero-link:1.1.1
+    container_name: upi-zero-link
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:${UPI_PORT:-8080}:8080"
+    volumes:
+      - "./server.ini:/etc/upi-zero-link/server.ini:ro"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, urllib.request;
+          data = json.load(urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3));
+          raise SystemExit(0 if data.get('ok') and data.get('service') == 'upi-zero-link' else 1)
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

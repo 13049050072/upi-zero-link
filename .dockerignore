@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.egg-info
+build
+dist
+tests
+verification
+server.ini
+upi-zero-link.ini
+accounts.json
+links.json
+*.pem
+.env
