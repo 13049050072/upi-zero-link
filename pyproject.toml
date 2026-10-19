@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "upi-zero-link"
-version = "1.1.1"
+version = "1.1.2"
 description = "India ₹0 UPI Autopay mandate link extractor (protocol-level, no browser)"
 readme = "README.md"
 requires-python = ">=3.10"

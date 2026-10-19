@@ -2,7 +2,7 @@ services:
   upi-zero-link:
     build:
       context: .
-    image: upi-zero-link:1.1.1
+    image: upi-zero-link:1.1.2
     container_name: upi-zero-link
     restart: unless-stopped
     init: true

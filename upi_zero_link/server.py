@@ -300,6 +300,10 @@ class ServerState:
                 job.status = "succeeded"
             else:
                 job.error = str((result or {}).get("error") or "提链失败")
+                si_state = str((result or {}).get("si") or "").strip()
+                if job.error == "declined" and si_state:
+                    # 把 Stripe 的 SetupIntent 状态带出来，便于区分“被风控拒绝”与“协议问题”
+                    job.error = "declined (%s)" % si_state
                 self.quota.release()
                 job.publish("error", {"error": job.error, "message": job.error})
                 job.status = "failed"
