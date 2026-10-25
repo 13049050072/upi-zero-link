@@ -50,6 +50,10 @@ class NetworkDown(Exception):
     """传输层断线：没到 confirm 就抛，调用方可以安全地换出口重来。"""
 
 
+class ConfirmationUncertain(Exception):
+    """A confirmation was attempted; rebuilding the checkout could duplicate it."""
+
+
 def _curl_code(exc: Exception) -> int:
     match = re.search(r"\bcurl(?:error)?\s*:?\s*\((\d{1,3})\)", str(exc), re.I)
     return int(match.group(1)) if match else 0
@@ -184,11 +188,14 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
                           accept_language=fp["accept_language"])
     stripe_headers = identity.stripe_headers(fp)
     phase = "stripe_init"
+    confirm_attempted = False
 
     def call_stripe(method, url, **kwargs):
         try:
             return request_http(stripe, method, url, headers=stripe_headers, timeout=25, **kwargs)
         except Exception as exc:  # noqa: BLE001
+            if confirm_attempted and phase != "instructions":
+                raise ConfirmationUncertain("%s: %s" % (phase, str(exc)[:140])) from exc
             raise NetworkDown("%s: %s" % (phase, str(exc)[:140]))
 
     stripe_js_id = str(uuid.uuid4())
@@ -263,6 +270,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
     config_id = str(init.get("config_id") or "")
     hits: dict = {}
     declined = False
+    setup_failed = False
     billing = address
     result = None
     verify_reason = ""
@@ -288,10 +296,12 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
             "billing_details[address][postal_code]": billing["postal_code"],
         })
         if pm_response is not None and pm_response.status_code >= 400:
-            return {"ok": False, "error": "payment_method_http_%s" % pm_response.status_code}
+            return {"ok": False, "error": "payment_method_http_%s" % pm_response.status_code,
+                    "confirm_attempted": confirm_attempted}
         pm_id = str(((pm_response.json() or {}) if pm_response is not None else {}).get("id") or "")
         if not pm_id:
-            return {"ok": False, "error": "payment_method_unavailable"}
+            return {"ok": False, "error": "payment_method_unavailable",
+                    "confirm_attempted": confirm_attempted}
 
         confirm_body = {
             "eid": "NA",
@@ -317,10 +327,12 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
         emit("stage stripe_confirm")
         emit("  confirm attempted")
         phase = "stripe_confirm"
+        confirm_attempted = True
         confirmed = call_stripe("POST", CONFIRM_URL % cs, data=confirm_body)
         if confirmed is None or confirmed.status_code >= 400:
             status = confirmed.status_code if confirmed is not None else 0
-            return {"ok": False, "error": "stripe_confirm_http_%s" % status}
+            return {"ok": False, "error": "stripe_confirm_http_%s" % status,
+                    "confirm_attempted": True}
 
         approve_headers = identity.chatgpt_headers(
             access_token, fp,
@@ -365,14 +377,16 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
             if page is not None and page.status_code < 400:
                 body = page.json() or {}
                 hits.update({k: v for k, v in _scan(body).items() if v})
-                setup_intent = body.get("setup_intent") or {}
-                si_state = "%s/%s" % (setup_intent.get("status"),
-                                      (setup_intent.get("last_setup_error") or {}).get("decline_code") or "-")
-                if (setup_intent.get("status") in ("requires_payment_method", "canceled")
-                        and setup_intent.get("last_setup_error")):
-                    declined = True
-                    setup_error = _error_detail(setup_intent["last_setup_error"],
-                                                secrets=(access_token, session_token, proxy))
+                setup_intent = body.get("setup_intent")
+                if isinstance(setup_intent, dict) and setup_intent.get("status"):
+                    last_error = setup_intent.get("last_setup_error") or {}
+                    si_state = "%s/%s" % (setup_intent["status"], last_error.get("decline_code") or "-")
+                    setup_failed = bool(setup_intent["status"] in ("requires_payment_method", "canceled")
+                                        and last_error)
+                    declined = bool(setup_failed and (last_error.get("decline_code")
+                                    or last_error.get("code") in ("card_declined", "payment_method_declined")))
+                    setup_error = (_error_detail(last_error, secrets=(access_token, session_token, proxy))
+                                   if setup_failed else "")
             elif page is not None:
                 emit("  instructions HTTP %s" % page.status_code)
             if hits.get("hosted_instructions_url"):
@@ -388,15 +402,17 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
                 hits.pop("hosted_instructions_url", None)
         if hits.get("hosted_instructions_url"):
             break
-        if declined:
+        if setup_failed:
             break
         if result not in (None, "approved"):
             break
 
     if not hits.get("hosted_instructions_url"):
-        error = "declined" if declined else ("link_unverified" if verify_reason else "no_link")
+        error = ("declined" if declined else "setup_failed" if setup_failed
+                 else "link_unverified" if verify_reason else "no_link")
         return {"ok": False, "error": error, "due": due, "si": si_state,
-                "approved": result, "verify": verify_reason, "error_detail": setup_error}
+                "approved": result, "verify": verify_reason, "error_detail": setup_error,
+                "confirm_attempted": confirm_attempted}
     return {
         "ok": True,
         "email": email,

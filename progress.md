@@ -50,3 +50,28 @@
 - 验收记录 `/opt/upi-zero-link/release-a2b413e.json`；源码快照 `/home/ubuntu/upi-zero-link-build-a2b413e`。
 - 回滚：`cd /opt/upi-zero-link && sudo -n cp docker-compose.yml.before-a2b413e docker-compose.yml && sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`。原镜像1.1.2保留；`server.ini.before-a2b413e`为配置备份。
 - 上游 unusual activity 与截图中 generic_decline 的拒绝未解除；本轮修复错误详情和额度占用，未声称出码成功。
+
+## 2026-10-25 - Task: 复核延迟审查并修复提链状态与确认后重试
+
+### What was done
+
+- 在当前版本复现“最后状态 requires_action 却残留 declined”，按最新有效快照更新错误状态。
+- 将缺少拒绝依据的初始化错误归为 setup_failed，保留参数错误等具体说明。
+- 复现 CLI confirm 响应超时重复建两次结算，增加确认已尝试状态与 ConfirmationUncertain，停止确认后整单重建。
+- 保留确认前网络恢复与原会话内只读 instructions 重试。
+
+### Testing
+
+- 新增 6 项离线回归；修复前已观察到旧状态、重复建单、非拒绝误分类失败，修复后通过。
+- 本地全量 unittest 24 项通过；原离线自测通过；git diff --check 通过。
+- 新增成功回归确认 requires_action 且核验通过的链接与二维码仍正常返回；这是离线固定响应，未作为真实出码证据。
+
+### Notes
+
+- `upi_zero_link/protocol.py`：区分确认前后网络异常，保留确认标志并按最新快照分类。
+- `upi_zero_link/cli.py`：确认结果未知或确认后失败时停止重建整单。
+- `tests/test_confirmation_state.py`：新增状态更新、确认超时、重试边界与成功交付回归。
+- `docs/extraction-errors.md`：补充错误分类与确认后的重试规则。
+- `progress.md`：追加本轮复核和验证记录。
+- 不包含审查提出的并发锁、事件原子发布、TTL、executor 回滚、会话回收及全流程 JSON 边界；这些仍待独立修复，本轮只围绕失败分类和重复建单。
+- 本轮回滚点为 `upi-zero-link:a2b413e-r2`；上线前备份 compose，失败时恢复备份并执行 `sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`。

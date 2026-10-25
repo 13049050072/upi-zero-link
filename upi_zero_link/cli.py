@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .protocol import NetworkDown, extract
+from .protocol import ConfirmationUncertain, NetworkDown, extract
 from .proxy import normalize_proxy
 from .service import extract_via_service, normalize_service_url
 
@@ -107,6 +107,9 @@ def run_account(account: dict, proxies: list[str], *, rounds: int, tries: int,
             else:
                 result = extractor(account, proxy, tries=tries,
                                    emit=(lambda *a: None) if quiet else log)
+        except ConfirmationUncertain as exc:
+            log("  confirm 后结果未确定，停止重建任务：%s" % str(exc)[:140])
+            break
         except NetworkDown as exc:
             log("  出口断了，换下一条：%s" % str(exc)[:140])
             continue
@@ -116,7 +119,7 @@ def run_account(account: dict, proxies: list[str], *, rounds: int, tries: int,
             result["exit"] = _label(proxy)
             return result
         log("  未出链：%s" % result.get("error"))
-        if result.get("error") in ("declined", "nonzero_due", "upi_unavailable", "link_unverified"):
+        if result.get("confirm_attempted") or result.get("error") in ("declined", "nonzero_due", "upi_unavailable", "link_unverified"):
             # 该号已经跑到终点，再打只是白烧资格
             break
     return None

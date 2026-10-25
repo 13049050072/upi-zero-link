@@ -32,6 +32,14 @@ git diff --check
 
 本轮程序修复不代表上游拒绝已解除，完整成功标准仍是取得核验通过的链接与二维码。
 
+## 状态与确认后的重试
+
+- 根据最新有效的 SetupIntent 快照更新失败标记；`requires_action` 覆盖旧拒绝状态后，不再输出残留的 `declined`。
+- 只有失败状态带 `decline_code` 或明确拒绝代码时才归为 `declined`；其他初始化错误归为 `setup_failed`，保留上游详情。
+- confirm 提交前记录 `confirm_attempted=True`。提交时网络超时抛出 `ConfirmationUncertain`，CLI 停止整单重建；提交后的失败结果也带此标志。
+- instructions 的只读网络请求仍允许在同会话内读取重试；确认前 NetworkDown 的原重试行为保持。
+- 当前 SSE 错误仍保留原有兼容格式，此轮没有更换 turb 的错误协议。
+
 ## 已部署与入口校验
 
 Oracle 最终运行镜像 `upi-zero-link:a2b413e-r2`，代码提交 `a2b413e76dbc3a061c599ebebc708890b76f8126`。`/app` 和 `/usr/local/lib/python3.12/site-packages` 各 24 个运行文件均与本地提交一致，容器 healthy、RestartCount=0，公网 `/healthz` 为正常响应。
