@@ -31,3 +31,17 @@ git diff --check
 回归覆盖：checkout 上游原文透传和凭据过滤、非 JSON 响应保留状态码、Stripe 拒绝详情和失效链接不交付、check 模式在 confirm 前结束、检测额度释放、SSE 向现有客户端传出详情。
 
 本轮程序修复不代表上游拒绝已解除，完整成功标准仍是取得核验通过的链接与二维码。
+
+## 已部署与入口校验
+
+Oracle 最终运行镜像 `upi-zero-link:a2b413e-r2`，代码提交 `a2b413e76dbc3a061c599ebebc708890b76f8126`。`/app` 和 `/usr/local/lib/python3.12/site-packages` 各 24 个运行文件均与本地提交一致，容器 healthy、RestartCount=0，公网 `/healthz` 为正常响应。
+
+控制台入口 `/usr/local/bin/upi-zero-link-server` 从 site-packages 导入包，覆盖 `/app` 后必须重新安装包。候选镜像应从 `/` 运行离线测试，验证实际安装包；只在 `/app` 运行 `python -c` 会优先读当前目录，掩盖安装包未更新。发布定义见 `deploy/Dockerfile.release`：
+
+```bash
+sudo -n docker build -f deploy/Dockerfile.release --build-arg VCS_REF=a2b413e76dbc3a061c599ebebc708890b76f8126 -t upi-zero-link:a2b413e-r2 .
+```
+
+部署后通过 turb 现有 `_iter_sse_events_with_reconnect` 和 `_extract_error_message` 实测账号 1285，终结错误完整包含 unusual activity，未进入 confirm，链接和二维码均为空，检测结束 reserved=0。此项证明错误透传可用，没有证明上游拒绝已解除。
+
+回滚：在 `/opt/upi-zero-link` 恢复 `docker-compose.yml.before-a2b413e`，执行 `sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`。原镜像 `upi-zero-link:1.1.2` 保留。配置备份为 `server.ini.before-a2b413e`，本轮配置哈希未变。

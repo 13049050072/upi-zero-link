@@ -1,0 +1,10 @@
+# Release overlay for an existing upi-zero-link dependency image.
+FROM upi-zero-link:1.1.2
+ARG VCS_REF
+LABEL org.opencontainers.image.revision=$VCS_REF
+USER root
+COPY pyproject.toml README.md /app/
+COPY upi_zero_link /app/upi_zero_link
+# Console entrypoints import site-packages rather than /app.
+RUN python -m pip install --no-deps --no-cache-dir .
+USER app
