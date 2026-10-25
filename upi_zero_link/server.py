@@ -135,6 +135,9 @@ class _Job:
     email: str
     proxy: str
     tries: int
+    check_only: bool = False
+    plan_name: str = "chatgptplusplan"
+    promo_campaign: str = ""
     created_at: float = field(default_factory=time.time)
     status: str = "pending"
     events: list[tuple[str, dict]] = field(default_factory=list)
@@ -255,6 +258,9 @@ class ServerState:
         email: str = "",
         proxy: str = "",
         tries: int = 2,
+        check_only: bool = False,
+        plan_name: str = "chatgptplusplan",
+        promo_campaign: str = "",
     ) -> _Job:
         if not token.strip():
             raise ValueError("token 不能为空")
@@ -273,6 +279,9 @@ class ServerState:
                 email=email.strip(),
                 proxy=proxy.strip() or self._next_proxy(),
                 tries=tries,
+                check_only=bool(check_only),
+                plan_name=plan_name or "chatgptplusplan",
+                promo_campaign=promo_campaign,
             )
             self.jobs[job.job_id] = job
         job.publish("log", {"message": "queued", "payment_method": PAYMENT_METHOD})
@@ -288,12 +297,24 @@ class ServerState:
 
         try:
             result = self.extractor(
-                {"email": job.email, "access_token": job.token},
+                {"email": job.email, "access_token": job.token, "check_only": job.check_only,
+                 "plan_name": job.plan_name, "promo_campaign": job.promo_campaign},
                 job.proxy,
                 tries=job.tries,
                 emit=emit,
             )
-            if isinstance(result, dict) and result.get("ok"):
+            if isinstance(result, dict) and result.get("ok") and result.get("check_only"):
+                job.result = {
+                    "check_only": True,
+                    "payment_method": PAYMENT_METHOD,
+                    "due": result.get("due"),
+                    "payment_methods": result.get("payment_methods") or [],
+                    "payment_method_collection": result.get("payment_method_collection"),
+                }
+                self.quota.release()
+                job.publish("result", {"result": job.result})
+                job.status = "succeeded"
+            elif isinstance(result, dict) and result.get("ok"):
                 job.result = _result_payload(result)
                 self.quota.commit()
                 job.publish("result", {"result": job.result})
@@ -304,6 +325,9 @@ class ServerState:
                 if job.error == "declined" and si_state:
                     # 把 Stripe 的 SetupIntent 状态带出来，便于区分“被风控拒绝”与“协议问题”
                     job.error = "declined (%s)" % si_state
+                detail = str((result or {}).get("error_detail") or "").strip()
+                if detail:
+                    job.error += ": " + detail[:300]
                 self.quota.release()
                 job.publish("error", {"error": job.error, "message": job.error})
                 job.status = "failed"
@@ -453,6 +477,9 @@ class _Handler(BaseHTTPRequestHandler):
                 email=str(data.get("email") or ""),
                 proxy=str(data.get("proxy") or ""),
                 tries=tries,
+                check_only=str(data.get("mode") or "").strip().lower() == "check",
+                plan_name=str(data.get("plan_name") or "chatgptplusplan").strip(),
+                promo_campaign=str(data.get("promo_campaign") or "").strip(),
             )
         except ValueError as exc:
             self._error(str(exc))

@@ -221,9 +221,9 @@ upi://mandate?ver=01&pa=openaillc.cfp@cashfreensdlpb&pn=OpenAI
 | `nonzero_due` | 税区更新后应付 ≠ 0（promo 没生效），confirm 前就停 | 换会话可再试 |
 | `upi_unavailable` | 该会话不支持 UPI | 否 |
 | `tax_unverified` | 税区金额没读到 | 否 |
-| `declined` | Stripe 明确拒绝建委托（`generic_decline`） | 否，该号零元资格已耗尽 |
+| `declined` | Stripe 拒绝本次委托初始化；保留 SetupIntent 状态与错误详情 | 本轮停止；`generic_decline` 不证明试用资格耗尽 |
 | `link_unverified` / `no_link` | 读不到 / 核验不过指引页 | 视情况 |
-| `checkout_http_4xx` | 结账接口拒绝（401 = token 失效） | 换 token |
+| `checkout_http_4xx` | 结账接口拒绝；错误事件携带脱敏后的上游原因 | 401 检查 token；400 按具体响应判断，不盲目重试 |
 | `NetworkDown`（异常） | 传输层断线，发生在 confirm 之前 | **可以**，换出口重来 |
 
 日志里的 `due=… pmc=…` 是每轮的体检结果：

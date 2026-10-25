@@ -80,6 +80,25 @@ def _scan(payload) -> dict:
     return found
 
 
+def _error_detail(payload, *, secrets=()) -> str:
+    """Keep bounded upstream error fields, excluding credentials and URLs."""
+    if isinstance(payload, dict):
+        payload = payload.get("error") or payload.get("detail") or payload
+    if isinstance(payload, dict):
+        text = "; ".join("%s=%s" % (key, payload[key]) for key in
+                         ("type", "code", "decline_code", "param", "message")
+                         if isinstance(payload.get(key), (str, int)))
+    else:
+        text = payload if isinstance(payload, str) else ""
+    for secret in secrets:
+        if secret:
+            text = text.replace(str(secret), "[redacted]")
+    text = re.sub(r"https?://\S+", "[url]", text)
+    text = re.sub(r"[\w.+-]+@[\w.-]+", "[email]", text)
+    text = re.sub(r"\beyJ[A-Za-z0-9_.-]+", "[token]", text)
+    return " ".join(text.split())[:300]
+
+
 def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
             emit=print) -> dict:
     """对一个账号跑完整提链流程。
@@ -125,9 +144,11 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
             PROMO_CAMPAIGN, "oai-did=" + device_id, 25,
             lambda stage, status, msg: emit("risk %s %s %s" % (stage, status, str(msg)[:80])),
         )
+        plan_name = str(account.get("plan_name") or "chatgptplusplan").strip() or "chatgptplusplan"
+        promo_campaign = str(account.get("promo_campaign") or PROMO_CAMPAIGN).strip() or PROMO_CAMPAIGN
         headers = identity.chatgpt_headers(
             access_token, fp,
-            referer="https://chatgpt.com/?promo_campaign=" + PROMO_CAMPAIGN,
+            referer="https://chatgpt.com/?promo_campaign=" + promo_campaign,
             route="/backend-api/payments/checkout")
         headers.update(sentinel or {})
         if not (sentinel or {}).get("openai-sentinel-token"):
@@ -136,9 +157,9 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
         checkout = preconfirm(lambda: request_http(
             chatgpt, "POST", CHECKOUT_URL, headers=headers, timeout=25, json={
                 "entry_point": "all_plans_pricing_modal",
-                "plan_name": "chatgptplusplan",
+                "plan_name": plan_name,
                 "billing_details": {"country": "IN", "currency": "INR"},
-                "promo_campaign": {"promo_campaign_id": PROMO_CAMPAIGN,
+                "promo_campaign": {"promo_campaign_id": promo_campaign,
                                    "is_coupon_from_query_param": False},
                 "checkout_ui_mode": "custom",
             }))
@@ -146,7 +167,12 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
         raise NetworkDown("checkout: %s" % str(exc)[:140])
 
     if checkout.status_code >= 400:
-        return {"ok": False, "error": "checkout_http_%s" % checkout.status_code}
+        try:
+            detail = _error_detail(checkout.json(), secrets=(access_token, session_token, proxy))
+        except ValueError:
+            detail = ""
+        return {"ok": False, "error": "checkout_http_%s" % checkout.status_code,
+                "error_detail": detail}
     data = checkout.json() or {}
     cs = data.get("checkout_session_id")
     pk = data.get("publishable_key")
@@ -219,6 +245,16 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
     init = {**init, **tax_page}
     due = total["due"]
     emit("  acc=%s due=%s pmc=%s" % (email or "?", due, init.get("payment_method_collection")))
+    if account.get("check_only"):
+        # 检测在税区更新后结束，不创建支付方式或提交 confirm。
+        return {
+            "ok": True,
+            "check_only": True,
+            "due": due,
+            "payment_methods": [str(item).lower() for item in methods],
+            "payment_method_collection": init.get("payment_method_collection"),
+            "email": email,
+        }
     if due != 0:
         return {"ok": False, "error": "nonzero_due", "due": due}
 
@@ -230,6 +266,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
     billing = address
     result = None
     verify_reason = ""
+    setup_error = ""
 
     for attempt in range(1, tries + 1):
         billing = next_address()
@@ -334,6 +371,8 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
                 if (setup_intent.get("status") in ("requires_payment_method", "canceled")
                         and setup_intent.get("last_setup_error")):
                     declined = True
+                    setup_error = _error_detail(setup_intent["last_setup_error"],
+                                                secrets=(access_token, session_token, proxy))
             elif page is not None:
                 emit("  instructions HTTP %s" % page.status_code)
             if hits.get("hosted_instructions_url"):
@@ -357,7 +396,7 @@ def extract(account: dict, proxy: str, *, tries: int = CONFIRM_ATTEMPTS,
     if not hits.get("hosted_instructions_url"):
         error = "declined" if declined else ("link_unverified" if verify_reason else "no_link")
         return {"ok": False, "error": error, "due": due, "si": si_state,
-                "approved": result, "verify": verify_reason}
+                "approved": result, "verify": verify_reason, "error_detail": setup_error}
     return {
         "ok": True,
         "email": email,
