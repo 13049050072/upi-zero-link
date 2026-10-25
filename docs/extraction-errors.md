@@ -40,9 +40,17 @@ git diff --check
 - instructions 的只读网络请求仍允许在同会话内读取重试；确认前 NetworkDown 的原重试行为保持。
 - 当前 SSE 错误仍保留原有兼容格式，此轮没有更换 turb 的错误协议。
 
-## 已部署与入口校验
+## 当前部署
 
-Oracle 最终运行镜像 `upi-zero-link:a2b413e-r2`，代码提交 `a2b413e76dbc3a061c599ebebc708890b76f8126`。`/app` 和 `/usr/local/lib/python3.12/site-packages` 各 24 个运行文件均与本地提交一致，容器 healthy、RestartCount=0，公网 `/healthz` 为正常响应。
+状态与确认后重试修复提交为 `f5c576424b9cbce613c00beeefbeaca56a364568`，Oracle 运行 `upi-zero-link:f5c5764`。候选镜像从 `/` 加载安装包，全量 24 项 unittest 通过；`/app` 和 site-packages 各 24 个运行文件与提交一致。真实 check 请求仍返回 unusual activity，未进入 confirm，检测完成 reserved=0。
+
+验收文件为 `/opt/upi-zero-link/release-f5c5764.json`。回滚：`cd /opt/upi-zero-link && sudo -n cp docker-compose.yml.before-f5c5764 docker-compose.yml && sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`，回到 `upi-zero-link:a2b413e-r2`。
+
+延迟审查提出的 SSE 锁与终态发布、TTL、executor 提交回滚、会话回收和成功响应 JSON 边界，尚未在本轮修改，需逐项复现后处理。
+
+## 首轮部署与入口校验
+
+首轮运行镜像 `upi-zero-link:a2b413e-r2`，代码提交 `a2b413e76dbc3a061c599ebebc708890b76f8126`。`/app` 和 `/usr/local/lib/python3.12/site-packages` 各 24 个运行文件均与本地提交一致，容器 healthy、RestartCount=0，公网 `/healthz` 为正常响应。
 
 控制台入口 `/usr/local/bin/upi-zero-link-server` 从 site-packages 导入包，覆盖 `/app` 后必须重新安装包。候选镜像应从 `/` 运行离线测试，验证实际安装包；只在 `/app` 运行 `python -c` 会优先读当前目录，掩盖安装包未更新。发布定义见 `deploy/Dockerfile.release`：
 

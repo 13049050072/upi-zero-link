@@ -75,3 +75,26 @@
 - `progress.md`：追加本轮复核和验证记录。
 - 不包含审查提出的并发锁、事件原子发布、TTL、executor 回滚、会话回收及全流程 JSON 边界；这些仍待独立修复，本轮只围绕失败分类和重复建单。
 - 本轮回滚点为 `upi-zero-link:a2b413e-r2`；上线前备份 compose，失败时恢复备份并执行 `sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`。
+
+## 2026-10-25 - Task: 提链状态与确认后重试修复 Oracle 验收
+
+### What was done
+
+- `f5c576424b9cbce613c00beeefbeaca56a364568` 已提交推送并读回远端 master 一致，Oracle 已切换 `upi-zero-link:f5c5764`。
+- 候选镜像重新安装包，保留上轮错误详情与检测额度修复。
+
+### Testing
+
+- Oracle 候选镜像从 `/` 运行 24 项 unittest 全部通过。
+- `/app` 与 site-packages 各 24 个运行文件哈希与提交一致，differences 为空。
+- 线上容器 healthy、RestartCount=0；配置哈希一致；切换前没有进行中的 turb 提链账号。
+- turb 原客户端真实 check 验收仍返回 `checkout_http_400: Our systems have detected unusual activity. Please try again later.`，未进入 confirm，has_link=false、has_qr=false、reserved=0。
+- 状态及确认超时修复采用离线固定响应验证，未发送真实 confirm，未将离线链接当作成功出码。
+
+### Notes
+
+- `docs/extraction-errors.md`：补充当前镜像、验证与回滚点，单列审查未修复项。
+- `progress.md`：追加 Oracle 验收证据。
+- 运行源码快照 `/home/ubuntu/upi-zero-link-build-f5c5764`；验收 `/opt/upi-zero-link/release-f5c5764.json`。
+- 回滚：`cd /opt/upi-zero-link && sudo -n cp docker-compose.yml.before-f5c5764 docker-compose.yml && sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`，恢复 `upi-zero-link:a2b413e-r2`。
+- 上游拒绝仍未解除；SSE 并发、TTL、executor 提交回滚、会话回收和 JSON 边界审查项未纳入本轮修复。
