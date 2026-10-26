@@ -10,7 +10,20 @@ Our systems have detected unusual activity. Please try again later.
 
 本次请求未进入创建支付方式、Stripe confirm 或商户 approve。此响应证明请求被上游结算检查拒绝；它未提供具体触发条件，不能据此断言是缺 Node、参数错误、某条代理或账号资格耗尽。
 
-截图另三条 `requires_payment_method/generic_decline` 表示 Stripe 拒绝本次 SetupIntent。该代码未提供更细拒绝依据，不能单凭它推断账号促销资格耗尽。
+截图另三条 `requires_payment_method/generic_decline` 表示 Stripe 拒绝本次 SetupIntent；截图本身只展示了状态码，没有更细字段，不能单凭截图推断账号促销资格耗尽。后续对仍在库中的 1180 实测取得了 `type/code/decline_code/message`，详见下文。
+
+2026-10-26 对仍在库中的账号 1180 做了一次完整实测，取得了更细的上游快照：`checkout=200`、`stripe_init=200`、税区更新 `200`、`due=0`、支付方式包含 `upi`、`payment_method(type=upi)=200`、`confirm=200`、`approve=approved`，但随后 payment page 返回 SetupIntent：
+
+```text
+status=requires_payment_method
+last_setup_error.type=card_error
+last_setup_error.code=setup_attempt_failed
+last_setup_error.decline_code=generic_decline
+last_setup_error.message=The latest attempt to set up the payment method has failed.
+next_action=absent
+```
+
+这说明请求已通过 checkout、金额和 UPI 支付方式闸门，拒绝发生在 Stripe SetupIntent 的 UPI 委托设置阶段；响应没有给出比 `generic_decline` 更具体的触发条件。1180 本次没有 `hosted_instructions_url` 或二维码。该确认请求已经执行过，不能再把同一账号当作未消耗样本重试。
 
 ## 修复内容
 
@@ -47,6 +60,12 @@ git diff --check
 验收文件为 `/opt/upi-zero-link/release-f5c5764.json`。回滚：`cd /opt/upi-zero-link && sudo -n cp docker-compose.yml.before-f5c5764 docker-compose.yml && sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`，回到 `upi-zero-link:a2b413e-r2`。
 
 延迟审查提出的 SSE 锁与终态发布、TTL、executor 提交回滚、会话回收和成功响应 JSON 边界，尚未在本轮修改，需逐项复现后处理。
+
+## 2026-10-26 真实拒绝细节补证
+
+- 账号 1285 与 849 的只读 `check_only` 探针均为 Sentinel `t/so` 存在、`checkout HTTP 400`，上游 `detail` 为 `Our systems have detected unusual activity. Please try again later.`；两次都未创建 Stripe PaymentMethod，未提交 confirm。
+- 账号 1180 的完整探针走到 `confirm=200`、`approve=approved`，但最终 SetupIntent 为 `requires_payment_method`，`last_setup_error` 为 `card_error / setup_attempt_failed / generic_decline`，消息为 `The latest attempt to set up the payment method has failed.`；`next_action` 为空，因此没有可核验链接或二维码。
+- 结论：`unusual activity` 是 OpenAI checkout 建单层拒绝；`generic_decline` 是 Stripe SetupIntent 委托设置层拒绝。两者的细节已被保留并能通过 SSE 传给 turb，但上游仍未给出更具体触发条件，当前仍没有完整成功的链接/二维码交付。
 
 ## 首轮部署与入口校验
 

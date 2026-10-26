@@ -1,0 +1,31 @@
+TARGET: docs/extraction-errors.md and progress.md
+BASELINE_FILE: verification/upstream-decline-20261026/BASELINE_FILE
+BASELINE_PROGRESS_FILE: verification/upstream-decline-20261026/BASELINE_PROGRESS_FILE
+MODIFIED_FILE: verification/upstream-decline-20261026/MODIFIED_FILE
+MODIFIED_PROGRESS_FILE: verification/upstream-decline-20261026/MODIFIED_PROGRESS_FILE
+DIFF_FILE: verification/upstream-decline-20261026/DIFF_FILE
+ROLLBACK: verification/upstream-decline-20261026/ROLLBACK.sh
+
+BASELINE
+Command: git show HEAD:docs/extraction-errors.md | grep -c '2026-10-26 真实拒绝细节补证' || true
+Observed: 0
+Exit: 0
+
+MODIFIED
+Command: grep -c '2026-10-26 真实拒绝细节补证' docs/extraction-errors.md
+Observed: 1
+Exit: 0
+Command: grep -c 'generic_decline' docs/extraction-errors.md
+Observed: 5
+Exit: 0
+
+ROLLBACK
+Command: mkdir -p /tmp/upi-rollback-20261026 && ROLLBACK.sh /tmp/upi-rollback-20261026 && cmp BASELINE_FILE /tmp/upi-rollback-20261026/docs-extraction-errors.md && cmp BASELINE_PROGRESS_FILE /tmp/upi-rollback-20261026/progress.md
+Observed: both restored files byte-identical to their baselines; SHA-256 matches
+Exit: 0
+
+LIVE EVIDENCE
+1285 and 849 check_only: checkout HTTP 400, sentinel_present=true, detail=Our systems have detected unusual activity. Please try again.
+1180 full probe: checkout=200, init=200, tax=200, due=0, pm=200(type=upi), confirm=200, approve=approved, page=200, SetupIntent requires_payment_method, last_setup_error=card_error/setup_attempt_failed/generic_decline, next_action absent.
+Oracle: image upi-zero-link:f5c5764, health=healthy, restarts=0, /healthz ok=true.
+Tests: 24 unittest cases passed in the Oracle production dependency image; offline checks passed; git diff --check passed.

@@ -1,0 +1,56 @@
+diff --git a/docs/extraction-errors.md b/docs/extraction-errors.md
+index f697a04..51fcb07 100644
+--- a/docs/extraction-errors.md
++++ b/docs/extraction-errors.md
+@@ -13 +13,14 @@ Our systems have detected unusual activity. Please try again later.
+-截图另三条 `requires_payment_method/generic_decline` 表示 Stripe 拒绝本次 SetupIntent。该代码未提供更细拒绝依据，不能单凭它推断账号促销资格耗尽。
++截图另三条 `requires_payment_method/generic_decline` 表示 Stripe 拒绝本次 SetupIntent；截图本身只展示了状态码，没有更细字段，不能单凭截图推断账号促销资格耗尽。后续对仍在库中的 1180 实测取得了 `type/code/decline_code/message`，详见下文。
++
++2026-10-26 对仍在库中的账号 1180 做了一次完整实测，取得了更细的上游快照：`checkout=200`、`stripe_init=200`、税区更新 `200`、`due=0`、支付方式包含 `upi`、`payment_method(type=upi)=200`、`confirm=200`、`approve=approved`，但随后 payment page 返回 SetupIntent：
++
++```text
++status=requires_payment_method
++last_setup_error.type=card_error
++last_setup_error.code=setup_attempt_failed
++last_setup_error.decline_code=generic_decline
++last_setup_error.message=The latest attempt to set up the payment method has failed.
++next_action=absent
++```
++
++这说明请求已通过 checkout、金额和 UPI 支付方式闸门，拒绝发生在 Stripe SetupIntent 的 UPI 委托设置阶段；响应没有给出比 `generic_decline` 更具体的触发条件。1180 本次没有 `hosted_instructions_url` 或二维码。该确认请求已经执行过，不能再把同一账号当作未消耗样本重试。
+@@ -50,0 +64,6 @@ git diff --check
++## 2026-10-26 真实拒绝细节补证
++
++- 账号 1285 与 849 的只读 `check_only` 探针均为 Sentinel `t/so` 存在、`checkout HTTP 400`，上游 `detail` 为 `Our systems have detected unusual activity. Please try again later.`；两次都未创建 Stripe PaymentMethod，未提交 confirm。
++- 账号 1180 的完整探针走到 `confirm=200`、`approve=approved`，但最终 SetupIntent 为 `requires_payment_method`，`last_setup_error` 为 `card_error / setup_attempt_failed / generic_decline`，消息为 `The latest attempt to set up the payment method has failed.`；`next_action` 为空，因此没有可核验链接或二维码。
++- 结论：`unusual activity` 是 OpenAI checkout 建单层拒绝；`generic_decline` 是 Stripe SetupIntent 委托设置层拒绝。两者的细节已被保留并能通过 SSE 传给 turb，但上游仍未给出更具体触发条件，当前仍没有完整成功的链接/二维码交付。
++
+diff --git a/progress.md b/progress.md
+index 94c4e04..e61ac14 100644
+--- a/progress.md
++++ b/progress.md
+@@ -100,0 +101,24 @@
++
++## 2026-10-26 - Task: 补齐上游 unusual activity 与 generic_decline 的真实拒绝依据
++
++### What was done
++
++- 对账号 1285、849 执行真实 `check_only` 探针：Sentinel `t/so` 均已生成，OpenAI checkout 返回 HTTP 400，原始 `detail` 为 `Our systems have detected unusual activity. Please try again later.`；两次均在 confirm 前结束。
++- 对账号 1180 执行一次完整协议探针：checkout、Stripe init、印度税区、UPI PaymentMethod、confirm 和 approve 均成功，最终 payment page 的 SetupIntent 返回 `requires_payment_method`。
++- 取得 Stripe 真实 `last_setup_error`：`type=card_error`、`code=setup_attempt_failed`、`decline_code=generic_decline`，消息为 `The latest attempt to set up the payment method has failed.`；`next_action` 为空，没有 `hosted_instructions_url` 或二维码。
++- 将上述证据补入错误定位文档，区分 OpenAI checkout 层的 unusual activity 与 Stripe SetupIntent 层的 generic decline；不再把 generic decline 推断成“试用资格耗尽”。
++
++### Testing
++
++- 1285、849：真实检查均返回 `checkout HTTP 400`，`sentinel_present=true`，未进入 PaymentMethod/confirm。
++- 1180：真实完整探针返回 `checkout=200`、`init=200`、`tax=200`、`due=0`、`pm=200(type=upi)`、`confirm=200`、`approve=approved`、`page=200`、`si_status=requires_payment_method`、`si_err=card_error/setup_attempt_failed/generic_decline`，`next_action` 为空。
++- 本轮没有交付有效链接或二维码；1180 已执行过 confirm，不再重复提交。
++- 线上服务仍为 `upi-zero-link:f5c5764`，容器 `healthy`、`RestartCount=0`；本轮只做真实探针与文档补证，没有改镜像或配置。
++- 验证：使用 Oracle 线上 `upi-zero-link:f5c5764` 依赖镜像、挂载当前工作树并提供临时 `/tmp`，`tests.test_protocol_errors tests.test_confirmation_state tests.test_features tests.test_server tests.test_offline` 共 24 项通过；`tests/test_offline.py` 全部通过；`git diff --check` 通过。
++- macOS 系统 Python 的初次测试因本机未安装 `curl_cffi` 产生 4 个导入错误，未计入代码失败；最终验收以 Oracle 同依赖镜像 24 项结果为准。
++
++### Notes
++
++- `docs/extraction-errors.md`：补充 1180 的真实 Stripe SetupIntent 字段与 1285/849 的 checkout 原文。
++- `progress.md`：追加本轮真实拒绝依据与未交付结果。
++- 回滚：本轮无运行代码、镜像或配置变更；仅回滚文档可执行 `git restore -- docs/extraction-errors.md progress.md`。

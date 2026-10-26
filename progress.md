@@ -98,3 +98,27 @@
 - 运行源码快照 `/home/ubuntu/upi-zero-link-build-f5c5764`；验收 `/opt/upi-zero-link/release-f5c5764.json`。
 - 回滚：`cd /opt/upi-zero-link && sudo -n cp docker-compose.yml.before-f5c5764 docker-compose.yml && sudo -n docker compose up -d --no-build --force-recreate upi-zero-link`，恢复 `upi-zero-link:a2b413e-r2`。
 - 上游拒绝仍未解除；SSE 并发、TTL、executor 提交回滚、会话回收和 JSON 边界审查项未纳入本轮修复。
+
+## 2026-10-26 - Task: 补齐上游 unusual activity 与 generic_decline 的真实拒绝依据
+
+### What was done
+
+- 对账号 1285、849 执行真实 `check_only` 探针：Sentinel `t/so` 均已生成，OpenAI checkout 返回 HTTP 400，原始 `detail` 为 `Our systems have detected unusual activity. Please try again later.`；两次均在 confirm 前结束。
+- 对账号 1180 执行一次完整协议探针：checkout、Stripe init、印度税区、UPI PaymentMethod、confirm 和 approve 均成功，最终 payment page 的 SetupIntent 返回 `requires_payment_method`。
+- 取得 Stripe 真实 `last_setup_error`：`type=card_error`、`code=setup_attempt_failed`、`decline_code=generic_decline`，消息为 `The latest attempt to set up the payment method has failed.`；`next_action` 为空，没有 `hosted_instructions_url` 或二维码。
+- 将上述证据补入错误定位文档，区分 OpenAI checkout 层的 unusual activity 与 Stripe SetupIntent 层的 generic decline；不再把 generic decline 推断成“试用资格耗尽”。
+
+### Testing
+
+- 1285、849：真实检查均返回 `checkout HTTP 400`，`sentinel_present=true`，未进入 PaymentMethod/confirm。
+- 1180：真实完整探针返回 `checkout=200`、`init=200`、`tax=200`、`due=0`、`pm=200(type=upi)`、`confirm=200`、`approve=approved`、`page=200`、`si_status=requires_payment_method`、`si_err=card_error/setup_attempt_failed/generic_decline`，`next_action` 为空。
+- 本轮没有交付有效链接或二维码；1180 已执行过 confirm，不再重复提交。
+- 线上服务仍为 `upi-zero-link:f5c5764`，容器 `healthy`、`RestartCount=0`；本轮只做真实探针与文档补证，没有改镜像或配置。
+- 验证：使用 Oracle 线上 `upi-zero-link:f5c5764` 依赖镜像、挂载当前工作树并提供临时 `/tmp`，`tests.test_protocol_errors tests.test_confirmation_state tests.test_features tests.test_server tests.test_offline` 共 24 项通过；`tests/test_offline.py` 全部通过；`git diff --check` 通过。
+- macOS 系统 Python 的初次测试因本机未安装 `curl_cffi` 产生 4 个导入错误，未计入代码失败；最终验收以 Oracle 同依赖镜像 24 项结果为准。
+
+### Notes
+
+- `docs/extraction-errors.md`：补充 1180 的真实 Stripe SetupIntent 字段与 1285/849 的 checkout 原文。
+- `progress.md`：追加本轮真实拒绝依据与未交付结果。
+- 回滚：本轮无运行代码、镜像或配置变更；仅回滚文档可执行 `git restore -- docs/extraction-errors.md progress.md`。
